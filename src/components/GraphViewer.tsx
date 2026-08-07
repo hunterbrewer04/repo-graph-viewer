@@ -13,7 +13,8 @@ import type { GraphData, GraphLink, GraphNode } from "@/lib/graphLoader";
  *
  * The per-renderer packages are imported rather than the `react-force-graph`
  * umbrella: the umbrella also pulls in the AR/VR builds, which throw
- * "AFRAME is not defined" in dev, where nothing is tree-shaken.
+ * "AFRAME is not defined" in dev, where nothing is tree-shaken. Importing them
+ * separately also means the Three.js bundle only downloads if 3D is opened.
  */
 const ForceGraph2D = dynamic(
   () =>
@@ -23,23 +24,28 @@ const ForceGraph2D = dynamic(
   { ssr: false },
 );
 
+const ForceGraph3D = dynamic(
+  () =>
+    import("react-force-graph-3d").then(
+      (mod) => mod.default as unknown as ComponentType<ForceGraph3DProps>,
+    ),
+  { ssr: false },
+);
+
+export type ViewMode = "2d" | "3d";
+
 /**
  * The simulation writes coordinates onto the node objects we hand it and
  * swaps each link's string endpoints for live node references.
  */
-type SimNode = GraphNode & { x?: number; y?: number };
+type SimNode = GraphNode & { x?: number; y?: number; z?: number };
 type SimLink = Omit<GraphLink, "source" | "target"> & {
   source: string | SimNode;
   target: string | SimNode;
 };
 
-/**
- * Hand-written props covering only what this viewer uses. The library's own
- * generic signature does not survive `next/dynamic`, and a narrow local
- * interface type-checks our call sites better than `any` would.
- */
-interface ForceGraph2DProps {
-  ref?: React.RefObject<ForceGraphHandle | undefined>;
+/** Props shared by both renderers. */
+interface ForceGraphSharedProps {
   graphData: { nodes: GraphNode[]; links: GraphLink[] };
   width?: number;
   height?: number;
@@ -48,27 +54,61 @@ interface ForceGraph2DProps {
   nodeVal?: (node: SimNode) => number;
   nodeLabel?: (node: SimNode) => string;
   nodeColor?: (node: SimNode) => string;
+  linkColor?: (link: SimLink) => string;
+  linkWidth?: (link: SimLink) => number;
+  linkDirectionalArrowLength?: (link: SimLink) => number;
+  linkDirectionalArrowRelPos?: number;
+  onNodeClick?: (node: SimNode) => void;
+  onNodeHover?: (node: SimNode | null) => void;
+  onBackgroundClick?: () => void;
+  onEngineStop?: () => void;
+  cooldownTime?: number;
+}
+
+/**
+ * Hand-written props covering only what this viewer uses. The libraries' own
+ * generic signatures do not survive `next/dynamic`, and narrow local
+ * interfaces type-check our call sites better than `any` would.
+ */
+interface ForceGraph2DProps extends ForceGraphSharedProps {
+  ref?: React.RefObject<ForceGraph2DHandle | undefined>;
   nodeCanvasObjectMode?: (node: SimNode) => "before" | "after" | "replace";
   nodeCanvasObject?: (
     node: SimNode,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
   ) => void;
-  linkColor?: (link: SimLink) => string;
-  linkWidth?: (link: SimLink) => number;
   linkLineDash?: (link: SimLink) => number[] | null;
-  linkDirectionalArrowLength?: (link: SimLink) => number;
-  linkDirectionalArrowRelPos?: number;
-  onNodeClick?: (node: SimNode) => void;
-  onNodeHover?: (node: SimNode | null) => void;
-  onEngineStop?: () => void;
-  cooldownTime?: number;
   minZoom?: number;
   maxZoom?: number;
 }
 
-interface ForceGraphHandle {
+interface ForceGraph3DProps extends ForceGraphSharedProps {
+  ref?: React.RefObject<ForceGraph3DHandle | undefined>;
+  nodeOpacity?: number;
+  nodeResolution?: number;
+  linkOpacity?: number;
+  showNavInfo?: boolean;
+  controlType?: "trackball" | "orbit" | "fly";
+}
+
+interface ForceGraph2DHandle {
   zoomToFit: (ms?: number, padding?: number) => void;
+}
+
+interface ForceGraph3DHandle {
+  zoomToFit: (ms?: number, padding?: number) => void;
+  controls: () => unknown;
+}
+
+/** The slice of Three's OrbitControls this component drives. */
+interface OrbitLike {
+  autoRotate: boolean;
+  autoRotateSpeed: number;
+}
+
+function isOrbitLike(value: unknown): value is OrbitLike {
+  return typeof value === "object" && value !== null && "autoRotate" in value;
 }
 
 /** Endpoints are strings before the first simulation tick and objects after. */
@@ -84,7 +124,11 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** `#rrggbb` -> `rgba(r,g,b,alpha)`, for dimming without a second palette. */
+/**
+ * `#rrggbb` -> `rgba(r,g,b,alpha)`, for dimming without a second palette.
+ * Both renderers understand rgba: the 3D one splits the alpha out onto the
+ * material rather than the color.
+ */
 function withAlpha(hex: string, alpha: number): string {
   const value = hex.replace("#", "");
   const r = parseInt(value.slice(0, 2), 16);
@@ -96,6 +140,7 @@ function withAlpha(hex: string, alpha: number): string {
 const LINK_BASE = "rgba(140, 140, 165, 0.18)";
 const LINK_ACTIVE = "rgba(226, 232, 240, 0.85)";
 const LINK_MUTED = "rgba(140, 140, 165, 0.05)";
+const BACKGROUND = "#08080b";
 
 export interface GraphViewerProps {
   data: GraphData;
@@ -110,12 +155,15 @@ export default function GraphViewer({
   selectedId,
   onSelect,
 }: GraphViewerProps) {
-  const graphRef = useRef<ForceGraphHandle | undefined>(undefined);
+  const graph2dRef = useRef<ForceGraph2DHandle | undefined>(undefined);
+  const graph3dRef = useRef<ForceGraph3DHandle | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [mode, setMode] = useState<ViewMode>("2d");
+  const [autoRotate, setAutoRotate] = useState(true);
 
-  // ForceGraph2D takes explicit pixel dimensions rather than filling its parent.
+  // Both renderers take explicit pixel dimensions rather than filling a parent.
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
@@ -126,6 +174,40 @@ export default function GraphViewer({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  // `G` toggles dimension, except while typing in a field.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "g" && event.key !== "G") return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, [contenteditable='true']")) return;
+      setMode((current) => (current === "2d" ? "3d" : "2d"));
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  /**
+   * OrbitControls exposes auto-rotate, TrackballControls (the 3D default) does
+   * not — hence `controlType="orbit"`. The controls object only exists once the
+   * lazily-loaded renderer has mounted, so retry across frames until it does.
+   */
+  useEffect(() => {
+    if (mode !== "3d") return;
+    let frame = 0;
+    const apply = () => {
+      const controls = graph3dRef.current?.controls();
+      if (isOrbitLike(controls)) {
+        controls.autoRotate = autoRotate;
+        controls.autoRotateSpeed = 0.55;
+        return;
+      }
+      frame = requestAnimationFrame(apply);
+    };
+    apply();
+    return () => cancelAnimationFrame(frame);
+  }, [mode, autoRotate]);
 
   /**
    * The simulation mutates this object in place, so it must stay referentially
@@ -146,32 +228,43 @@ export default function GraphViewer({
     return ids;
   }, [adjacency, focusId]);
 
+  const touchesFocus = useCallback(
+    (link: SimLink) =>
+      !!focusId &&
+      (endId(link.source) === focusId || endId(link.target) === focusId),
+    [focusId],
+  );
+
+  /**
+   * 3D dims less: its spheres are Lambert-shaded, so lighting already darkens
+   * them well below the flat 2D circles at the same alpha.
+   */
+  const dimAlpha = mode === "3d" ? 0.22 : 0.12;
+
   const nodeColor = useCallback(
     (node: SimNode) => {
       if (!highlighted) return node.color;
-      return highlighted.has(node.id) ? node.color : withAlpha(node.color, 0.12);
+      return highlighted.has(node.id)
+        ? node.color
+        : withAlpha(node.color, dimAlpha);
     },
-    [highlighted],
+    [dimAlpha, highlighted],
   );
 
   const linkColor = useCallback(
     (link: SimLink) => {
       if (!focusId) return LINK_BASE;
-      const touchesFocus =
-        endId(link.source) === focusId || endId(link.target) === focusId;
-      return touchesFocus ? LINK_ACTIVE : LINK_MUTED;
+      return touchesFocus(link) ? LINK_ACTIVE : LINK_MUTED;
     },
-    [focusId],
+    [focusId, touchesFocus],
   );
 
   const linkWidth = useCallback(
     (link: SimLink) => {
       if (!focusId) return 0.6;
-      const touchesFocus =
-        endId(link.source) === focusId || endId(link.target) === focusId;
-      return touchesFocus ? 1.6 : 0.4;
+      return touchesFocus(link) ? 1.6 : 0.4;
     },
-    [focusId],
+    [focusId, touchesFocus],
   );
 
   // INFERRED edges are graphify's best guess rather than a parsed fact.
@@ -181,14 +274,11 @@ export default function GraphViewer({
   );
 
   const linkArrowLength = useCallback(
-    (link: SimLink) => {
-      if (!focusId) return 0;
-      const touchesFocus =
-        endId(link.source) === focusId || endId(link.target) === focusId;
-      return touchesFocus ? 4 : 0;
-    },
-    [focusId],
+    (link: SimLink) => (focusId && touchesFocus(link) ? 4 : 0),
+    [focusId, touchesFocus],
   );
+
+  const nodeVal = useCallback((node: SimNode) => node.val + 1, []);
 
   const nodeLabel = useCallback((node: SimNode) => {
     const where = node.file
@@ -239,34 +329,40 @@ export default function GraphViewer({
   );
 
   /**
-   * Frame the graph once per loaded dataset. The first fit runs when the
-   * simulation settles; a second pass follows because nodes drift slightly
-   * during the fit animation itself, leaving the first framing too loose.
-   * Guarded by a ref so later engine stops never yank a user's own zoom.
+   * Frame the graph once per loaded dataset and per dimension switch. The first
+   * fit runs when the simulation settles; a second pass follows because nodes
+   * drift during the fit animation, leaving the first framing too loose.
+   * Guarded by a ref so later engine stops never yank a user's own camera.
    */
   const hasFitRef = useRef(false);
   useEffect(() => {
     hasFitRef.current = false;
-  }, [data]);
+  }, [data, mode]);
 
   const handleEngineStop = useCallback(() => {
     if (hasFitRef.current) return;
     hasFitRef.current = true;
-    graphRef.current?.zoomToFit(400, 60);
-    window.setTimeout(() => graphRef.current?.zoomToFit(250, 60), 500);
-  }, []);
+    // 3D fits a bounding sphere rather than a box, so the same padding leaves
+    // noticeably more dead space than in 2D.
+    const padding = mode === "2d" ? 60 : 25;
+    const handle = mode === "2d" ? graph2dRef.current : graph3dRef.current;
+    handle?.zoomToFit(400, padding);
+    window.setTimeout(() => handle?.zoomToFit(250, padding), 500);
+  }, [mode]);
+
+  const ready = size.width > 0 && size.height > 0;
 
   return (
-    <div ref={containerRef} className="h-full w-full">
-      {size.width > 0 && size.height > 0 && (
+    <div ref={containerRef} className="relative h-full w-full">
+      {ready && mode === "2d" && (
         <ForceGraph2D
-          ref={graphRef}
+          ref={graph2dRef}
           graphData={graphData}
           width={size.width}
           height={size.height}
-          backgroundColor="#08080b"
+          backgroundColor={BACKGROUND}
           nodeRelSize={3}
-          nodeVal={(node) => node.val + 1}
+          nodeVal={nodeVal}
           nodeColor={nodeColor}
           nodeLabel={nodeLabel}
           nodeCanvasObjectMode={nodeCanvasObjectMode}
@@ -286,6 +382,72 @@ export default function GraphViewer({
           maxZoom={40}
         />
       )}
+
+      {ready && mode === "3d" && (
+        <ForceGraph3D
+          ref={graph3dRef}
+          graphData={graphData}
+          width={size.width}
+          height={size.height}
+          backgroundColor={BACKGROUND}
+          nodeRelSize={3}
+          nodeVal={nodeVal}
+          nodeColor={nodeColor}
+          nodeLabel={nodeLabel}
+          // Both are multiplied by the color's own alpha, so keep them at 1 and
+          // let the rgba values above be the single source of truth.
+          nodeOpacity={1}
+          nodeResolution={12}
+          linkColor={linkColor}
+          linkWidth={linkWidth}
+          linkOpacity={1}
+          linkDirectionalArrowLength={linkArrowLength}
+          linkDirectionalArrowRelPos={1}
+          onNodeHover={handleHover}
+          onNodeClick={handleClick}
+          onEngineStop={handleEngineStop}
+          cooldownTime={4000}
+          controlType="orbit"
+          showNavInfo={false}
+        />
+      )}
+
+      <div className="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
+        {mode === "3d" && (
+          <label className="pointer-events-auto flex cursor-pointer select-none items-center gap-1.5 rounded-md border border-border bg-surface/90 px-2.5 py-1.5 text-[11px] text-muted backdrop-blur transition-colors hover:text-foreground">
+            <input
+              type="checkbox"
+              checked={autoRotate}
+              onChange={(event) => setAutoRotate(event.target.checked)}
+              className="size-3 accent-accent"
+            />
+            Auto-rotate
+          </label>
+        )}
+
+        <div
+          role="group"
+          aria-label="View mode"
+          className="pointer-events-auto flex overflow-hidden rounded-md border border-border bg-surface/90 backdrop-blur"
+          title="Toggle 2D / 3D (G)"
+        >
+          {(["2d", "3d"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setMode(option)}
+              aria-pressed={mode === option}
+              className={`px-3 py-1.5 text-[11px] font-medium uppercase transition-colors ${
+                mode === option
+                  ? "bg-surface-raised text-foreground"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
