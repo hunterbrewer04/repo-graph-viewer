@@ -191,6 +191,79 @@ describe("loadGraph — defensive defaults", () => {
   });
 });
 
+/**
+ * Cases taken from graphs this viewer was actually pointed at, so future
+ * graphify output keeps being handled the way these repos needed.
+ */
+describe("loadGraph — observed graphify variation", () => {
+  it("handles a graph with no built_at_commit at all (non-git repo)", () => {
+    // Learning-Website's output omits the key entirely.
+    const graph = loadGraph(
+      JSON.stringify({
+        directed: true,
+        multigraph: false,
+        graph: {},
+        nodes: [{ id: "a", label: "A", community: 0 }],
+        links: [],
+        hyperedges: [],
+      }),
+    );
+    expect(graph.stats.commit).toBe("");
+  });
+
+  it("wraps the palette when a graph has more communities than colors", () => {
+    // Learning-Website clusters into 20 communities against a 16-color palette.
+    const nodes = Array.from({ length: 20 }, (_, i) => ({
+      id: `n${i}`,
+      label: `N${i}`,
+      community: i,
+    }));
+    const graph = loadGraph(JSON.stringify({ nodes, links: [] }));
+    expect(graph.stats.communities).toBe(20);
+    expect(new Set(graph.nodes.map((n) => n.color)).size).toBe(
+      COMMUNITY_PALETTE.length,
+    );
+    // Community 16 wraps back onto community 0's color.
+    expect(graph.nodes[16].color).toBe(graph.nodes[0].color);
+  });
+
+  it("ignores node fields it does not model", () => {
+    // `_callable` and `metadata` appear in newer graphify output.
+    const graph = loadGraph(
+      JSON.stringify({
+        nodes: [
+          {
+            id: "a",
+            label: "A",
+            _callable: true,
+            metadata: { anything: [1, 2] },
+            norm_label: "a",
+            file_type: "code",
+          },
+        ],
+        links: [],
+      }),
+    );
+    expect(graph.nodes[0]).toMatchObject({ id: "a", name: "A", val: 0 });
+  });
+
+  it("passes through relation names it has never seen", () => {
+    const graph = loadGraph(
+      JSON.stringify({
+        nodes: [{ id: "a" }, { id: "b" }, { id: "c" }],
+        links: [
+          { source: "a", target: "b", relation: "indirect_call" },
+          { source: "b", target: "c", relation: "rationale_for" },
+        ],
+      }),
+    );
+    expect(graph.links.map((l) => l.relation)).toEqual([
+      "indirect_call",
+      "rationale_for",
+    ]);
+  });
+});
+
 describe("paletteForCommunity", () => {
   it("is deterministic for the same community", () => {
     expect(paletteForCommunity(5)).toBe(paletteForCommunity(5));
