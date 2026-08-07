@@ -1,68 +1,102 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+import DetailPanel from "@/components/DetailPanel";
+import GraphViewer from "@/components/GraphViewer";
+import { buildAdjacency } from "@/lib/adjacency";
+import { loadGraph, type GraphData } from "@/lib/graphLoader";
+
+const DEFAULT_GRAPH = "/graphs/apple-calendar-mcp.json";
+
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex flex-col leading-tight">
+      <span className="font-mono text-sm text-foreground">{value}</span>
+      <span className="text-[10px] uppercase tracking-wider text-muted">
+        {label}
+      </span>
+    </div>
+  );
+}
 
 export default function Home() {
+  const [graph, setGraph] = useState<GraphData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(DEFAULT_GRAPH)
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.text();
+      })
+      .then((text) => {
+        if (!cancelled) setGraph(loadGraph(text));
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Rebuilt only when a different graph loads, not on every selection change.
+  const adjacency = useMemo(
+    () => (graph ? buildAdjacency(graph) : new Map()),
+    [graph],
+  );
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <div className="flex h-full flex-col">
+      <header className="flex shrink-0 items-center gap-6 border-b border-border bg-surface px-5 py-3">
+        <div className="flex items-baseline gap-2.5">
+          <h1 className="text-sm font-semibold tracking-tight">
+            Repo Graph Viewer
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+          <span className="text-[11px] text-muted">apple-calendar-mcp</span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+
+        {graph && (
+          <div className="flex items-center gap-6">
+            <Stat label="nodes" value={graph.stats.nodes} />
+            <Stat label="links" value={graph.stats.links} />
+            <Stat label="communities" value={graph.stats.communities} />
+            <Stat label="commit" value={graph.stats.commit || "—"} />
+          </div>
+        )}
+      </header>
+
+      <main className="flex min-h-0 flex-1">
+        <div className="relative min-w-0 flex-1">
+          {graph ? (
+            <GraphViewer
+              data={graph}
+              adjacency={adjacency}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-xs text-muted">
+                {error ? `Could not load graph: ${error}` : "Loading graph…"}
+              </p>
+            </div>
+          )}
         </div>
+
+        {graph && (
+          <DetailPanel
+            data={graph}
+            adjacency={adjacency}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
+        )}
       </main>
     </div>
   );

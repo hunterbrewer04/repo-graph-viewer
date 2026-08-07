@@ -1,26 +1,57 @@
 @import "tailwindcss";
 
+/* Deliberately dark-only: the graph canvas is tuned for light-on-dark and a
+   light theme would wash out the community palette. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #08080b;
+  --surface: #101015;
+  --surface-raised: #16161d;
+  --border: #26262f;
+  --foreground: #e8e8ee;
+  --muted: #8b8b9a;
+  --accent: #60a5fa;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* The graph canvas owns the viewport; nothing should scroll it. */
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #35353f;
 }
