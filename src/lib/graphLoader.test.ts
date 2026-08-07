@@ -1,13 +1,7 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { COMMUNITY_PALETTE, loadGraph, paletteForCommunity } from "./graphLoader";
-
-const REAL_CORPUS = readFileSync(
-  join(process.cwd(), "public/graphs/apple-calendar-mcp.json"),
-  "utf8",
-);
+import { REAL_CORPUS, describeIfCorpus, hasCorpus } from "./testCorpus";
 
 /** Minimal graphify-shaped payload; override pieces per test. */
 function fixture(overrides: Record<string, unknown> = {}) {
@@ -35,7 +29,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
   });
 }
 
-describe("loadGraph — real corpus", () => {
+describeIfCorpus("loadGraph — real corpus", () => {
   it("parses the apple-calendar-mcp graph into 398 nodes and 977 links", () => {
     const graph = loadGraph(REAL_CORPUS);
     expect(graph.nodes).toHaveLength(398);
@@ -279,11 +273,14 @@ describe("paletteForCommunity", () => {
     );
   });
 
-  it("gives the 13 real communities 13 distinct colors", () => {
-    const graph = loadGraph(REAL_CORPUS);
-    const colors = new Set(graph.nodes.map((n) => n.color));
-    expect(colors.size).toBe(13);
-  });
+  it.skipIf(!hasCorpus)(
+    "gives the 13 real communities 13 distinct colors",
+    () => {
+      const graph = loadGraph(REAL_CORPUS);
+      const colors = new Set(graph.nodes.map((n) => n.color));
+      expect(colors.size).toBe(13);
+    },
+  );
 
   it("handles negative and non-finite community ids without crashing", () => {
     for (const value of [-1, -17, Number.NaN, Number.POSITIVE_INFINITY]) {

@@ -1,9 +1,8 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { adjacencyFor, buildAdjacency } from "./adjacency";
 import { loadGraph } from "./graphLoader";
+import { REAL_CORPUS, hasCorpus } from "./testCorpus";
 
 const graph = loadGraph(
   JSON.stringify({
@@ -68,17 +67,15 @@ describe("buildAdjacency", () => {
     });
   });
 
-  it("keeps in+out degree consistent with the loader's val", () => {
-    const real = loadGraph(
-      readFileSync(
-        join(process.cwd(), "public/graphs/apple-calendar-mcp.json"),
-        "utf8",
-      ),
-    );
-    const realIndex = buildAdjacency(real);
-    for (const node of real.nodes) {
-      const entry = adjacencyFor(realIndex, node.id);
-      expect(entry.in.length + entry.out.length).toBe(node.val);
-    }
-  });
+  it.skipIf(!hasCorpus)(
+    "keeps in+out degree consistent with the loader's val",
+    () => {
+      const real = loadGraph(REAL_CORPUS);
+      const realIndex = buildAdjacency(real);
+      for (const node of real.nodes) {
+        const entry = adjacencyFor(realIndex, node.id);
+        expect(entry.in.length + entry.out.length).toBe(node.val);
+      }
+    },
+  );
 });

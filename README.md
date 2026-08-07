@@ -11,14 +11,29 @@ npm run dev     # http://localhost:3000
 npm test        # loader + adjacency unit tests
 ```
 
+Most tests are self-contained. Six of them assert against a real graphify graph
+and are skipped unless one exists on disk; point them at any repo you have
+already run graphify on:
+
+```bash
+GRAPH_CORPUS=/path/to/repo/graphify-out/graph.json npm test
+```
+
 ## Loading a graph
 
-- **Presets** — the dropdown is built from `public/graphs/manifest.json`.
-- **Drag and drop** — drop a `graph.json` anywhere on the canvas.
-- **Load file…** — bottom-right, same thing via a file picker.
+Run graphify on any repo, then open the `graph.json` it writes:
 
-To add a preset, drop the JSON in `public/graphs/` and add an entry to
-`manifest.json`.
+```bash
+graphify extract /path/to/repo --code-only
+graphify cluster-only /path/to/repo --no-label   # optional: community naming
+# -> /path/to/repo/graphify-out/graph.json
+```
+
+- **Drag and drop** a `graph.json` anywhere on the canvas.
+- **Load file…** (bottom-right) opens a file picker for the same thing.
+
+Loading a graph replaces whatever is on screen. No datasets ship with this repo;
+it starts empty and renders whatever you give it.
 
 ## Controls
 

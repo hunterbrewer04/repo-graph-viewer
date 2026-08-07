@@ -1,8 +1,0 @@
-[
-  {
-    "id": "apple-calendar-mcp",
-    "name": "apple-calendar-mcp",
-    "file": "/graphs/apple-calendar-mcp.json",
-    "stats": { "nodes": 398, "links": 977, "communities": 13 }
-  }
-]
