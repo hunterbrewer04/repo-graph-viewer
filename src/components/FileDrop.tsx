@@ -83,7 +83,8 @@ export default function FileDrop({ onFile, onError, children }: FileDropProps) {
     >
       {children}
 
-      <div className="pointer-events-none absolute bottom-4 left-4">
+      {/* Bottom-right, because Next's dev-mode indicator sits bottom-left. */}
+      <div className="pointer-events-none absolute bottom-4 right-4">
         <button
           type="button"
           onClick={() => inputRef.current?.click()}

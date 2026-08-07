@@ -162,6 +162,16 @@ export default function GraphViewer({
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [mode, setMode] = useState<ViewMode>("2d");
   const [autoRotate, setAutoRotate] = useState(true);
+  const [query, setQuery] = useState("");
+
+  /** Kinds present in this graph, most common first, for the legend. */
+  const kinds = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const node of data.nodes) {
+      counts.set(node.kind, (counts.get(node.kind) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [data]);
 
   // Both renderers take explicit pixel dimensions rather than filling a parent.
   useEffect(() => {
@@ -175,18 +185,29 @@ export default function GraphViewer({
     return () => observer.disconnect();
   }, []);
 
-  // `G` toggles dimension, except while typing in a field.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "g" && event.key !== "G") return;
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, [contenteditable='true']")) return;
+      const typing = !!target?.closest(
+        "input, textarea, [contenteditable='true']",
+      );
+
+      // Escape backs out of whatever is narrowing the view, even while typing.
+      if (event.key === "Escape") {
+        setQuery("");
+        onSelect(null);
+        if (typing) target?.blur();
+        return;
+      }
+
+      // `G` toggles dimension, but must not eat a `g` typed into the search box.
+      if (event.key !== "g" && event.key !== "G") return;
+      if (event.metaKey || event.ctrlKey || event.altKey || typing) return;
       setMode((current) => (current === "2d" ? "3d" : "2d"));
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [onSelect]);
 
   /**
    * OrbitControls exposes auto-rotate, TrackballControls (the 3D default) does
@@ -219,14 +240,40 @@ export default function GraphViewer({
     [data],
   );
 
+  /** Nodes whose label contains the query. Null when the box is empty. */
+  const matched = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return null;
+    return new Set(
+      data.nodes
+        .filter((node) => node.name.toLowerCase().includes(needle))
+        .map((node) => node.id),
+    );
+  }, [data, query]);
+
   // Hover wins over selection so the graph stays responsive while exploring.
   const focusId = hoverId ?? selectedId;
+
+  /**
+   * Which nodes stay at full brightness. A hovered or selected node takes
+   * precedence over the search, since it is the more specific intent.
+   */
   const highlighted = useMemo(() => {
-    if (!focusId) return null;
-    const ids = new Set(adjacencyFor(adjacency, focusId).neighbors);
-    ids.add(focusId);
+    if (focusId) {
+      const ids = new Set(adjacencyFor(adjacency, focusId).neighbors);
+      ids.add(focusId);
+      return ids;
+    }
+    if (!matched) return null;
+    // Matches alone read as disconnected dots, so keep their neighbors lit too.
+    const ids = new Set(matched);
+    for (const id of matched) {
+      for (const neighbor of adjacencyFor(adjacency, id).neighbors) {
+        ids.add(neighbor);
+      }
+    }
     return ids;
-  }, [adjacency, focusId]);
+  }, [adjacency, focusId, matched]);
 
   const touchesFocus = useCallback(
     (link: SimLink) =>
@@ -235,11 +282,18 @@ export default function GraphViewer({
     [focusId],
   );
 
+  const touchesMatch = useCallback(
+    (link: SimLink) =>
+      !!matched &&
+      (matched.has(endId(link.source)) || matched.has(endId(link.target))),
+    [matched],
+  );
+
   /**
    * 3D dims less: its spheres are Lambert-shaded, so lighting already darkens
    * them well below the flat 2D circles at the same alpha.
    */
-  const dimAlpha = mode === "3d" ? 0.22 : 0.12;
+  const dimAlpha = mode === "3d" ? 0.2 : 0.1;
 
   const nodeColor = useCallback(
     (node: SimNode) => {
@@ -253,18 +307,20 @@ export default function GraphViewer({
 
   const linkColor = useCallback(
     (link: SimLink) => {
-      if (!focusId) return LINK_BASE;
-      return touchesFocus(link) ? LINK_ACTIVE : LINK_MUTED;
+      if (focusId) return touchesFocus(link) ? LINK_ACTIVE : LINK_MUTED;
+      if (matched) return touchesMatch(link) ? LINK_ACTIVE : LINK_MUTED;
+      return LINK_BASE;
     },
-    [focusId, touchesFocus],
+    [focusId, matched, touchesFocus, touchesMatch],
   );
 
   const linkWidth = useCallback(
     (link: SimLink) => {
-      if (!focusId) return 0.6;
-      return touchesFocus(link) ? 1.6 : 0.4;
+      if (focusId) return touchesFocus(link) ? 1.6 : 0.4;
+      if (matched) return touchesMatch(link) ? 1.2 : 0.4;
+      return 0.6;
     },
-    [focusId, touchesFocus],
+    [focusId, matched, touchesFocus, touchesMatch],
   );
 
   // INFERRED edges are graphify's best guess rather than a parsed fact.
@@ -328,6 +384,8 @@ export default function GraphViewer({
     [onSelect],
   );
 
+  const handleBackgroundClick = useCallback(() => onSelect(null), [onSelect]);
+
   /**
    * Frame the graph once per loaded dataset and per dimension switch. The first
    * fit runs when the simulation settles; a second pass follows because nodes
@@ -374,6 +432,7 @@ export default function GraphViewer({
           linkDirectionalArrowRelPos={1}
           onNodeHover={handleHover}
           onNodeClick={handleClick}
+          onBackgroundClick={handleBackgroundClick}
           onEngineStop={handleEngineStop}
           // Default is 15s, which delays the initial zoom-to-fit far too long.
           // A few hundred nodes settle well inside 4s.
@@ -405,12 +464,44 @@ export default function GraphViewer({
           linkDirectionalArrowRelPos={1}
           onNodeHover={handleHover}
           onNodeClick={handleClick}
+          onBackgroundClick={handleBackgroundClick}
           onEngineStop={handleEngineStop}
           cooldownTime={4000}
           controlType="orbit"
           showNavInfo={false}
         />
       )}
+
+      <div className="pointer-events-none absolute left-4 top-4 flex max-w-[min(22rem,50%)] flex-col items-start gap-2">
+        <div className="pointer-events-auto relative">
+          {/* Deliberately type="text": the native search clear button would
+              sit on top of the match count, and Escape already clears. */}
+          <input
+            type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search nodes…"
+            aria-label="Search nodes"
+            className="w-56 rounded-md border border-border bg-surface/90 py-1.5 pl-2.5 pr-9 text-[11px] text-foreground placeholder:text-muted outline-none backdrop-blur focus:border-accent"
+          />
+          {matched && (
+            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-[10px] text-muted">
+              {matched.size}
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-1">
+          {kinds.map(([kind, count]) => (
+            <span
+              key={kind}
+              className="rounded border border-border bg-surface/90 px-1.5 py-0.5 font-mono text-[10px] text-muted backdrop-blur"
+            >
+              {kind} <span className="text-foreground/70">{count}</span>
+            </span>
+          ))}
+        </div>
+      </div>
 
       <div className="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
         {mode === "3d" && (
