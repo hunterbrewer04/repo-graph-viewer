@@ -3,12 +3,12 @@
 /* Deliberately dark-only: the graph canvas is tuned for light-on-dark and a
    light theme would wash out the community palette. */
 :root {
-  --background: #08080b;
-  --surface: #101015;
-  --surface-raised: #16161d;
-  --border: #26262f;
-  --foreground: #e8e8ee;
-  --muted: #8b8b9a;
+  --background: #050508;
+  --surface: #0e0e14;
+  --surface-raised: #15151d;
+  --border: #23232e;
+  --foreground: #ececf2;
+  --muted: #85859a;
   --accent: #60a5fa;
 }
 
@@ -54,4 +54,24 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #35353f;
+}
+
+/* Ambient deep-space backdrop behind the transparent graph canvas. Pure CSS:
+   zero per-frame JS cost, identical in 2D and 3D. */
+.graph-backdrop {
+  background:
+    radial-gradient(ellipse 80% 55% at 50% -10%, rgba(96, 165, 250, 0.10), transparent 60%),
+    radial-gradient(ellipse 60% 45% at 85% 110%, rgba(167, 139, 250, 0.07), transparent 65%),
+    var(--background);
+}
+
+.graph-stars {
+  background-image:
+    radial-gradient(1px 1px at 12% 22%, rgba(255,255,255,0.35), transparent 100%),
+    radial-gradient(1px 1px at 68% 8%,  rgba(255,255,255,0.28), transparent 100%),
+    radial-gradient(1.5px 1.5px at 84% 38%, rgba(255,255,255,0.22), transparent 100%),
+    radial-gradient(1px 1px at 32% 74%, rgba(255,255,255,0.30), transparent 100%),
+    radial-gradient(1px 1px at 55% 52%, rgba(255,255,255,0.20), transparent 100%),
+    radial-gradient(1.5px 1.5px at 8% 88%, rgba(255,255,255,0.18), transparent 100%),
+    radial-gradient(1px 1px at 92% 78%, rgba(255,255,255,0.26), transparent 100%);
 }
