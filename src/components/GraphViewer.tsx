@@ -7,6 +7,7 @@ import * as THREE from "three";
 
 import { adjacencyFor, type Adjacency } from "@/lib/adjacency";
 import CommunityLegend from "@/components/CommunityLegend";
+import SearchBox, { type SearchResult } from "@/components/SearchBox";
 import type { GraphData, GraphLink, GraphNode } from "@/lib/graphLoader";
 
 /**
@@ -98,12 +99,22 @@ interface ForceGraph3DProps extends ForceGraphSharedProps {
 interface ForceGraph2DHandle {
   zoomToFit: (ms?: number, padding?: number) => void;
   centerAt: (x?: number, y?: number, ms?: number) => void;
-  zoom: (k?: number, ms?: number) => void;
+  /** Setter form animates to `k`; bare getter returns the current zoom. */
+  zoom: {
+    (): number;
+    (k?: number, ms?: number): void;
+  };
 }
 
 interface ForceGraph3DHandle {
   zoomToFit: (ms?: number, padding?: number) => void;
   controls: () => unknown;
+  /** Signature verified against the installed react-force-graph-3d .d.ts. */
+  cameraPosition: (
+    position: Vec3Like,
+    lookAt?: Vec3Like,
+    transitionMs?: number,
+  ) => void;
 }
 
 /** A minimal slice of THREE.Vector3. */
@@ -239,6 +250,16 @@ export default function GraphViewer({
   const [mode, setMode] = useState<ViewMode>("2d");
   const [autoRotate, setAutoRotate] = useState(true);
   const [query, setQuery] = useState("");
+  const [activeResult, setActiveResult] = useState<number | null>(null);
+  /**
+   * Explicit "fly the camera to this node" signal. `nonce` increments so
+   * re-picking the SAME node re-triggers the effect (a bare id would not).
+   */
+  const [focusRequest, setFocusRequest] = useState<{
+    id: string;
+    nonce: number;
+  } | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | undefined>(undefined);
 
   /** Kinds present in this graph, most common first, for the legend. */
   const kinds = useMemo(() => {
@@ -286,6 +307,15 @@ export default function GraphViewer({
         setQuery("");
         onSelect(null);
         if (typing) target?.blur();
+        return;
+      }
+
+      // `/` focuses search, unless the keystroke belongs to a field already.
+      if (event.key === "/") {
+        if (event.metaKey || event.ctrlKey || event.altKey || typing) return;
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
         return;
       }
 
@@ -381,6 +411,48 @@ export default function GraphViewer({
         .map((node) => node.id),
     );
   }, [data, query]);
+
+  /** id -> node, for resolving the `matched` set into dropdown rows. */
+  const nodesById = useMemo(
+    () => new Map(data.nodes.map((node) => [node.id, node])),
+    [data],
+  );
+
+  /**
+   * Dropdown rows: capped at 8, shortest names first so "Serve" outranks
+   * "ServeTests" for a "serve" query. The full match count still feeds the
+   * badge and the `+N more` footer.
+   */
+  const searchResults = useMemo<SearchResult[]>(() => {
+    if (!matched) return [];
+    return [...matched]
+      .map((id) => nodesById.get(id))
+      .filter((node): node is GraphNode => node !== undefined)
+      .sort((a, b) => a.name.length - b.name.length)
+      .slice(0, 8)
+      .map(({ id, name, kind, color }) => ({ id, name, kind, color }));
+  }, [matched, nodesById]);
+
+  /**
+   * Picking a result selects the node through the ONE canonical selection
+   * path (`onSelect` — page.tsx owns selectedId; DetailPanel and the hover
+   * machinery react automatically), clears the query (selection highlight
+   * supersedes match dimming anyway), and fires the camera fly-to. The input
+   * is blurred so `/`-then-type flows stay snappy on the next round.
+   */
+  const pickResult = useCallback(
+    (result: SearchResult) => {
+      onSelect(result.id);
+      setQuery("");
+      setActiveResult(null);
+      searchInputRef.current?.blur();
+      setFocusRequest((prev) => ({
+        id: result.id,
+        nonce: (prev?.nonce ?? 0) + 1,
+      }));
+    },
+    [onSelect],
+  );
 
   // Hover wins over selection so the graph stays responsive while exploring.
   const focusId = hoverId ?? selectedId;
@@ -525,6 +597,16 @@ export default function GraphViewer({
       ctx.textBaseline = "top";
       ctx.fillStyle = node.id === focusId ? "#ffffff" : "#c8c8d4";
       ctx.fillText(node.name, node.x, node.y + radius + 1.5 / globalScale);
+
+      // Accent ring around the focused node (hover or selection) so the
+      // fly-to target stays identifiable after the camera settles.
+      if (node.id === focusId) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, radius + 3.5 / globalScale, 0, Math.PI * 2);
+        ctx.strokeStyle = "#60a5fa"; // --accent
+        ctx.lineWidth = 1.5 / globalScale;
+        ctx.stroke();
+      }
     },
     [focusId, highlighted],
   );
@@ -548,6 +630,12 @@ export default function GraphViewer({
    * it also re-applies autoRotate now that the 3D dolly has landed.
    * Guarded by `hasFitRef` so later engine stops never yank a user's camera.
    */
+  /**
+   * The +700ms correction pass is cancellable: an explicit search focus ends
+   * the intro's authority over the camera, so a pending correction must never
+   * fire after it and yank the view back.
+   */
+  const fitCorrectionRef = useRef<number | null>(null);
   const handleEngineStop = useCallback(() => {
     if (hasFitRef.current) return;
     hasFitRef.current = true;
@@ -556,7 +644,8 @@ export default function GraphViewer({
     const padding = mode === "2d" ? 60 : 25;
     const handle = mode === "2d" ? graph2dRef.current : graph3dRef.current;
     handle?.zoomToFit(mode === "2d" ? 1400 : 900, padding);
-    window.setTimeout(() => {
+    fitCorrectionRef.current = window.setTimeout(() => {
+      fitCorrectionRef.current = null;
       handle?.zoomToFit(300, padding);
       if (mode === "3d") {
         const controls = graph3dRef.current?.controls();
@@ -565,10 +654,112 @@ export default function GraphViewer({
     }, 700);
   }, [autoRotate, mode]);
 
+  /**
+   * Camera fly-to on an explicit search focus. Retries via rAF until the
+   * simulation has coordinates for the node (fresh loads may not yet), then:
+   * - ends the intro's authority (`hasFitRef`), cancelling any pending
+   *   correction pass so it can never snap the camera back afterwards;
+   * - 2D: zooms IN only — `max(current, 2.4)` respects a user already deeper
+   *   in — and retargets `centerAt` either way, over a ~0.75s glide;
+   * - 3D: steps back from the node along the CURRENT camera→target axis,
+   *   preserving the user's viewing direction, with distance clamped to
+   *   [140, 420] world units. No jarring side-of-node snaps. autoRotate is
+   *   left as the toggle holds it; orbiting around a focused node reads well
+   *   and the controls-adoption effect reconciles state on its next run.
+   *
+   * Bounded retry (~120 frames): if a node never gains coordinates, bail
+   * silently — the selection highlight still applied via pickResult.
+   */
+  useEffect(() => {
+    if (!focusRequest) return;
+    const { id } = focusRequest;
+    let frame = 0;
+    let attempts = 0;
+    const attempt = () => {
+      // `data.nodes` is typed without coordinates, but the simulation writes
+      // them onto these same objects; view as SimNode to read them.
+      const node = data.nodes.find((n) => n.id === id) as SimNode | undefined; // once-per-click; O(n) fine
+      if (
+        !node ||
+        node.x === undefined ||
+        node.y === undefined ||
+        attempts++ > 120
+      ) {
+        frame = requestAnimationFrame(attempt);
+        return;
+      }
+      // An explicit focus ends the intro's authority over the camera.
+      hasFitRef.current = true;
+      if (fitCorrectionRef.current !== null) {
+        clearTimeout(fitCorrectionRef.current);
+        fitCorrectionRef.current = null;
+      }
+      if (mode === "2d") {
+        const handle = graph2dRef.current;
+        if (!handle) return;
+        const current = handle.zoom(); // getter form
+        handle.zoom(Math.max(current, 2.4), 750); // closer, never out
+        handle.centerAt(node.x, node.y, 750);
+      } else {
+        const handle = graph3dRef.current;
+        if (!handle) return;
+        const controls = handle.controls();
+        let distance = 260;
+        let position: Vec3Like | undefined;
+        if (isOrbitLike(controls)) {
+          if (controls.target && controls.object) {
+            const p = controls.object.position;
+            const t = controls.target;
+            distance = Math.min(
+              420,
+              Math.max(
+                140,
+                Math.hypot(p.x - t.x, p.y - t.y, p.z - t.z),
+              ),
+            );
+          }
+          position = controls.object?.position;
+        }
+        // Preserve the user's viewing direction: step back from the node
+        // along the current camera→target axis.
+        const dir = (() => {
+          if (!position) return { x: 0, y: 0, z: 1 };
+          const len =
+            Math.hypot(
+              position.x - node.x!,
+              position.y - node.y!,
+              position.z - (node.z ?? 0),
+            ) || 1;
+          return {
+            x: (position.x - node.x!) / len,
+            y: (position.y - node.y!) / len,
+            z: (position.z - (node.z ?? 0)) / len,
+          };
+        })();
+        handle.cameraPosition(
+          {
+            x: node.x! + dir.x * distance,
+            y: node.y! + dir.y * distance,
+            z: (node.z ?? 0) + dir.z * distance,
+          },
+          { x: node.x!, y: node.y!, z: node.z ?? 0 },
+          750,
+        );
+      }
+    };
+    attempt();
+    return () => cancelAnimationFrame(frame);
+  }, [focusRequest, data, mode]);
+
+
   const ready = size.width > 0 && size.height > 0;
 
   return (
-    <div ref={containerRef} className="relative h-full w-full">
+    <div
+      ref={containerRef}
+      className="relative h-full w-full"
+      data-focus-active={focusRequest ? "true" : undefined}
+    >
       {/* Ambient CSS backdrop sits behind the transparent canvases: earlier
           siblings render below the absolutely-positioned force-graph layers. */}
       <div aria-hidden className="graph-backdrop absolute inset-0" />
@@ -656,21 +847,16 @@ export default function GraphViewer({
       </div>
       <div className="pointer-events-none absolute left-4 top-4 flex max-w-[min(22rem,50%)] flex-col items-start gap-2">
         <div className="pointer-events-auto relative">
-          {/* Deliberately type="text": the native search clear button would
-              sit on top of the match count, and Escape already clears. */}
-          <input
-            type="text"
+          <SearchBox
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search nodes…"
-            aria-label="Search nodes"
-            className="w-56 rounded-md border border-border bg-surface/90 py-1.5 pl-2.5 pr-9 text-[11px] text-foreground placeholder:text-muted outline-none backdrop-blur focus:border-accent"
+            results={searchResults}
+            activeIndex={activeResult}
+            inputRef={searchInputRef}
+            totalMatches={matched?.size}
+            onChange={setQuery}
+            onPick={pickResult}
+            onActiveIndexChange={setActiveResult}
           />
-          {matched && (
-            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-[10px] text-muted">
-              {matched.size}
-            </span>
-          )}
         </div>
       </div>
 
