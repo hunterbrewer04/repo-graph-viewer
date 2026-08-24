@@ -234,6 +234,11 @@ export interface GraphViewerProps {
   adjacency: Adjacency;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /**
+   * Node id to pre-select once post-mount (shared-link deep link, card D).
+   * Applied at most once per non-null value; absent ids are a no-op.
+   */
+  initialSelectedId?: string | null;
 }
 
 export default function GraphViewer({
@@ -241,6 +246,7 @@ export default function GraphViewer({
   adjacency,
   selectedId,
   onSelect,
+  initialSelectedId = null,
 }: GraphViewerProps) {
   const graph2dRef = useRef<ForceGraph2DHandle | undefined>(undefined);
   const graph3dRef = useRef<ForceGraph3DHandle | undefined>(undefined);
@@ -254,11 +260,19 @@ export default function GraphViewer({
   /**
    * Explicit "fly the camera to this node" signal. `nonce` increments so
    * re-picking the SAME node re-triggers the effect (a bare id would not).
+   * Lazy-initialised from `initialSelectedId` (card D shared-link deep
+   * link): if the id exists in this graph, the restored view flies to it on
+   * mount. Absent ids are silently ignored (selection is cosmetic).
    */
   const [focusRequest, setFocusRequest] = useState<{
     id: string;
     nonce: number;
-  } | null>(null);
+  } | null>(() =>
+    initialSelectedId &&
+    data.nodes.some((node) => node.id === initialSelectedId)
+      ? { id: initialSelectedId, nonce: 1 }
+      : null,
+  );
   const searchInputRef = useRef<HTMLInputElement | undefined>(undefined);
 
   /** Kinds present in this graph, most common first, for the legend. */
