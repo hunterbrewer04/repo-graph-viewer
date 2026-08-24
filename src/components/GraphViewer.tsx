@@ -318,8 +318,8 @@ export default function GraphViewer({
    * On the first pass for a fresh graph/mode, park the orbit camera at 2.2× its
    * distance-to-target so the post-settle `zoomToFit` becomes a dolly-in. The
    * park happens exactly once (before `onEngineStop` can fire) and auto-rotate
-   * stays off during the intro; the engine-stop timeout below re-applies the
-   * user's toggle once the fit lands.
+   * stays off during the intro; once the fit has landed (`hasFitRef` true),
+   * this effect adopts the live toggle so later prop changes take effect.
    */
   const dollyParkedRef = useRef(false);
   useEffect(() => {
@@ -348,7 +348,10 @@ export default function GraphViewer({
           }
           dollyParkedRef.current = true;
         }
-        controls.autoRotate = false;
+        // During the intro (fit not yet landed) auto-rotate stays off so the
+        // dolly-in reads cleanly; afterwards adopt the live toggle so user
+        // changes re-run through this effect and take effect immediately.
+        controls.autoRotate = hasFitRef.current ? autoRotate : false;
         controls.autoRotateSpeed = 0.55;
         return;
       }
