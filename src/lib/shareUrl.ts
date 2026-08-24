@@ -57,9 +57,34 @@ export async function decodeSharePayload(payload: string): Promise<string> {
   const stream = new Blob([bytes.buffer as ArrayBuffer])
     .stream()
     .pipeThrough(new DecompressionStream("deflate-raw"));
-  const text = await new Response(stream).text();
-  if (text.length > MAX_DECOMPRESSED) throw new Error(SHARE_DECODE_TOO_LARGE);
-  return text;
+
+  // Stream-read with a running size check: a deflate bomb (~1000x expansion)
+  // must abort mid-stream instead of materializing multi-GB output before the
+  // guard fires. Bounded memory — we never hold more than MAX_DECOMPRESSED.
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_DECOMPRESSED) {
+      // Cancel releases the pipe; the throw propagates to the caller's error
+      // channel ("Shared graph exceeds size limit.").
+      void reader.cancel().catch(() => {});
+      throw new Error(SHARE_DECODE_TOO_LARGE);
+    }
+    chunks.push(value);
+  }
+
+  // Reassemble and decode exactly what we kept — bounded by MAX_DECOMPRESSED.
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(merged);
 }
 
 /**
@@ -92,7 +117,7 @@ export function parseShareHash(hash: string): ParsedShareHash | null {
   const body = hash.startsWith("#") ? hash.slice(1) : hash;
   if (!body) return null;
   let payload: string | undefined;
-  let encodedNodeId: string | null = null;
+  let nodeId: string | null = null;
   for (const pair of body.split("&")) {
     const eq = pair.indexOf("=");
     if (eq === -1) continue;
@@ -102,12 +127,15 @@ export function parseShareHash(hash: string): ParsedShareHash | null {
       if (!value) return null; // `#g=` alone is not a share link
       payload = value;
     } else if (key === "n" && value) {
-      encodedNodeId = value;
+      // Malformed percent-encoding (%ZZ) must not take down bootstrap:
+      // selection is cosmetic (plan Assumption 6), so degrade to no selection.
+      try {
+        nodeId = decodeURIComponent(value);
+      } catch {
+        nodeId = null;
+      }
     }
   }
   if (payload === undefined) return null;
-  return {
-    payload,
-    nodeId: encodedNodeId === null ? null : decodeURIComponent(encodedNodeId),
-  };
+  return { payload, nodeId };
 }

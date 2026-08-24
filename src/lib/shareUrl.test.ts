@@ -60,6 +60,17 @@ describe("size guards", () => {
     );
   }, 20_000);
 
+  it("aborts a high-ratio deflate bomb without materializing it", async () => {
+    // ~1000x expansion: this input would decompress to 20 MB (1.25x the
+    // limit). The guard must fire mid-stream (bounded memory) — the rejection
+    // proves the bomb was cut off before the full output was built.
+    const payload = await encodeSharePayload("bomb\u0000".repeat(4_000_000));
+    expect(payload.length).toBeLessThan(MAX_HASH_CHARS);
+    await expect(decodeSharePayload(payload)).rejects.toThrow(
+      /exceeds size limit/,
+    );
+  }, 30_000);
+
   it("accepts decodes exactly at the limit boundary", async () => {
     const atLimit = "z".repeat(MAX_DECOMPRESSED);
     const payload = await encodeSharePayload(atLimit);
@@ -118,5 +129,13 @@ describe("parseShareHash edge cases", () => {
 
   it("treats a valueless n= as absent", () => {
     expect(parseShareHash("#g=payload&n=")?.nodeId).toBeNull();
+  });
+
+  it("degrades malformed percent-encoding in n= to no selection", () => {
+    // %ZZ is invalid percent-encoding; decodeURIComponent throws URIError.
+    // Selection is cosmetic (plan Assumption 6): payload must survive intact.
+    const parsed = parseShareHash("#g=abc&n=%ZZ");
+    expect(parsed?.payload).toBe("abc");
+    expect(parsed?.nodeId).toBeNull();
   });
 });

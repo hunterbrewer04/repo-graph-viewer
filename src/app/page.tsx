@@ -42,7 +42,11 @@ export default function Home() {
       // decode side re-enters through loadGraph unchanged.
       void buildShareHash(text).then(
         (hash) => history.replaceState(null, "", hash),
-        () => {}, // oversize-encode guard surfaces via setError below
+        (cause: unknown) => {
+          // Oversize-encode (>2M-char hash) must not be swallowed silently:
+          // surface it through the same channel as load failures.
+          setError(cause instanceof Error ? cause.message : String(cause));
+        },
       );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));

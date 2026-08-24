@@ -71,6 +71,24 @@ test("corrupted hash degrades gracefully to the empty state", async ({
   await expect(page.locator("canvas")).toHaveCount(0);
 });
 
+test("malformed percent-encoding in n= degrades to an unselected restore", async ({
+  page,
+}) => {
+  // Build a VALID payload, then append a broken n=%ZZ selection. The URIError
+  // from decodeURIComponent must never reach the bootstrap IIFE: the graph
+  // restores normally, just without a selection (selection is cosmetic).
+  await dropGraph(page);
+  const base = new URL(page.url());
+
+  const fresh = await page.context().newPage();
+  await fresh.goto(`${base.origin}${base.pathname}${base.hash}&n=%ZZ`);
+  await fresh.locator("canvas").first().waitFor({ state: "visible" });
+  await expect(fresh.getByText("shared link")).toBeVisible();
+  // No error surfaced; the corrupted-selection link did not take down load.
+  await expect(fresh.getByText(/corrupted or incomplete/)).toHaveCount(0);
+  await fresh.close();
+});
+
 test("a fresh drop supersedes the previous shared graph", async ({ page }) => {
   await dropGraph(page);
   const firstHash = new URL(page.url()).hash;
