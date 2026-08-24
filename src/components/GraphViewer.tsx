@@ -3,8 +3,10 @@
 import dynamic from "next/dynamic";
 import type { ComponentType } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
 
 import { adjacencyFor, type Adjacency } from "@/lib/adjacency";
+import CommunityLegend from "@/components/CommunityLegend";
 import type { GraphData, GraphLink, GraphNode } from "@/lib/graphLoader";
 
 /**
@@ -87,6 +89,7 @@ interface ForceGraph3DProps extends ForceGraphSharedProps {
   ref?: React.RefObject<ForceGraph3DHandle | undefined>;
   nodeOpacity?: number;
   nodeResolution?: number;
+  nodeThreeObject?: (node: SimNode) => unknown;
   linkOpacity?: number;
   showNavInfo?: boolean;
   controlType?: "trackball" | "orbit" | "fly";
@@ -94,6 +97,8 @@ interface ForceGraph3DProps extends ForceGraphSharedProps {
 
 interface ForceGraph2DHandle {
   zoomToFit: (ms?: number, padding?: number) => void;
+  centerAt: (x?: number, y?: number, ms?: number) => void;
+  zoom: (k?: number, ms?: number) => void;
 }
 
 interface ForceGraph3DHandle {
@@ -101,14 +106,30 @@ interface ForceGraph3DHandle {
   controls: () => unknown;
 }
 
+/** A minimal slice of THREE.Vector3. */
+interface Vec3Like {
+  x: number;
+  y: number;
+  z: number;
+}
+
 /** The slice of Three's OrbitControls this component drives. */
 interface OrbitLike {
   autoRotate: boolean;
   autoRotateSpeed: number;
+  /** OrbitControls keeps the camera on `object` and the pivot on `target`. */
+  object?: { position: Vec3Like };
+  target?: Vec3Like;
 }
 
 function isOrbitLike(value: unknown): value is OrbitLike {
-  return typeof value === "object" && value !== null && "autoRotate" in value;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "autoRotate" in value &&
+    "target" in value &&
+    "object" in value
+  );
 }
 
 /** Endpoints are strings before the first simulation tick and objects after. */
@@ -140,7 +161,62 @@ function withAlpha(hex: string, alpha: number): string {
 const LINK_BASE = "rgba(140, 140, 165, 0.18)";
 const LINK_ACTIVE = "rgba(226, 232, 240, 0.85)";
 const LINK_MUTED = "rgba(140, 140, 165, 0.05)";
-const BACKGROUND = "#08080b";
+/** Fully transparent: the CSS .graph-backdrop behind the canvas IS the bg. */
+const BACKGROUND = "rgba(0,0,0,0)";
+
+/*
+ * Shared Three.js resources for the sprite-halo glow. Everything expensive is
+ * allocated exactly once at module level — one sphere geometry, one radial
+ * glow texture, and per-color material caches (≤16 entries, the palette size).
+ * `nodeThreeObject` below reuses these instead of allocating per node.
+ */
+let sphereGeo: THREE.SphereGeometry | undefined;
+function getSphereGeo(): THREE.SphereGeometry {
+  return (sphereGeo ??= new THREE.SphereGeometry(1, 12, 8)); // matches nodeResolution={12}
+}
+
+const meshMats = new Map<string, THREE.MeshLambertMaterial>();
+function getMeshMat(color: string): THREE.MeshLambertMaterial {
+  let m = meshMats.get(color);
+  if (!m) {
+    m = new THREE.MeshLambertMaterial({ color });
+    meshMats.set(color, m);
+  }
+  return m;
+}
+
+let glowTex: THREE.CanvasTexture | undefined;
+function getGlowTexture(): THREE.CanvasTexture {
+  if (glowTex) return glowTex;
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const ctx = c.getContext("2d")!;
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, "rgba(255,255,255,0.9)");
+  g.addColorStop(0.25, "rgba(255,255,255,0.35)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  glowTex = new THREE.CanvasTexture(c);
+  return glowTex;
+}
+
+const glowMats = new Map<string, THREE.SpriteMaterial>();
+function getGlowMat(color: string): THREE.SpriteMaterial {
+  let m = glowMats.get(color);
+  if (!m) {
+    m = new THREE.SpriteMaterial({
+      map: getGlowTexture(),
+      color,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      transparent: true,
+      opacity: 0.55,
+    });
+    glowMats.set(color, m);
+  }
+  return m;
+}
 
 export interface GraphViewerProps {
   data: GraphData;
@@ -171,6 +247,19 @@ export default function GraphViewer({
       counts.set(node.kind, (counts.get(node.kind) ?? 0) + 1);
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [data]);
+
+  /** Communities present, largest first, for CommunityLegend. */
+  const communities = useMemo(() => {
+    const counts = new Map<number, { name: string; count: number }>();
+    for (const node of data.nodes) {
+      const hit = counts.get(node.community);
+      if (hit) hit.count += 1;
+      else counts.set(node.community, { name: node.communityName, count: 1 });
+    }
+    return [...counts.entries()]
+      .map(([community, { name, count }]) => ({ community, name, count }))
+      .sort((a, b) => b.count - a.count);
   }, [data]);
 
   // Both renderers take explicit pixel dimensions rather than filling a parent.
@@ -210,17 +299,56 @@ export default function GraphViewer({
   }, [onSelect]);
 
   /**
+   * Frame the graph once per loaded dataset and per dimension switch. The intro
+   * runs when the simulation settles; a second pass follows because nodes
+   * drift during the fit animation, leaving the first framing too loose.
+   * Guarded by a ref so later engine stops never yank a user's own camera.
+   */
+  const hasFitRef = useRef(false);
+  useEffect(() => {
+    hasFitRef.current = false;
+    dollyParkedRef.current = false;
+  }, [data, mode]);
+
+  /**
    * OrbitControls exposes auto-rotate, TrackballControls (the 3D default) does
    * not — hence `controlType="orbit"`. The controls object only exists once the
    * lazily-loaded renderer has mounted, so retry across frames until it does.
+   *
+   * On the first pass for a fresh graph/mode, park the orbit camera at 2.2× its
+   * distance-to-target so the post-settle `zoomToFit` becomes a dolly-in. The
+   * park happens exactly once (before `onEngineStop` can fire) and auto-rotate
+   * stays off during the intro; the engine-stop timeout below re-applies the
+   * user's toggle once the fit lands.
    */
+  const dollyParkedRef = useRef(false);
   useEffect(() => {
     if (mode !== "3d") return;
     let frame = 0;
     const apply = () => {
       const controls = graph3dRef.current?.controls();
       if (isOrbitLike(controls)) {
-        controls.autoRotate = autoRotate;
+        if (
+          !hasFitRef.current &&
+          !dollyParkedRef.current &&
+          controls.target &&
+          controls.object
+        ) {
+          const { x, y, z } = controls.target;
+          const position = controls.object.position;
+          const dx = position.x - x;
+          const dy = position.y - y;
+          const dz = position.z - z;
+          const scale = Math.hypot(dx, dy, dz);
+          if (scale > 0) {
+            // Park along the current view axis at 2.2× the distance.
+            position.x = x + dx * 2.2;
+            position.y = y + dy * 2.2;
+            position.z = z + dz * 2.2;
+          }
+          dollyParkedRef.current = true;
+        }
+        controls.autoRotate = false;
         controls.autoRotateSpeed = 0.55;
         return;
       }
@@ -336,6 +464,30 @@ export default function GraphViewer({
 
   const nodeVal = useCallback((node: SimNode) => node.val + 1, []);
 
+  /**
+   * 3D node = core sphere + additive glow sprite. Reuses the shared geometry,
+   * texture, and per-color material caches above; only the Group and two refs
+   * are allocated per call. Radius formula mirrors the 2D painter's
+   * `Math.sqrt(val + 1) * 3` scaled by nodeRelSize semantics.
+   */
+  const nodeThreeObject = useCallback(
+    (node: SimNode) => {
+      const group = new THREE.Group();
+      const radius = Math.sqrt(node.val + 1) * 3;
+
+      const core = new THREE.Mesh(getSphereGeo(), getMeshMat(node.color));
+      core.scale.setScalar(radius);
+
+      const halo = new THREE.Sprite(getGlowMat(node.color));
+      const dimmed = !!highlighted && !highlighted.has(node.id);
+      // Halo breathes with the core; dimmed nodes get a whisper of glow.
+      halo.scale.setScalar(radius * (dimmed ? 2.2 : 4));
+      group.add(core, halo);
+      return group;
+    },
+    [highlighted],
+  );
+
   const nodeLabel = useCallback((node: SimNode) => {
     const where = node.file
       ? `${escapeHtml(node.file)}${node.loc ? `:${escapeHtml(node.loc)}` : ""}`
@@ -387,16 +539,12 @@ export default function GraphViewer({
   const handleBackgroundClick = useCallback(() => onSelect(null), [onSelect]);
 
   /**
-   * Frame the graph once per loaded dataset and per dimension switch. The first
-   * fit runs when the simulation settles; a second pass follows because nodes
-   * drift during the fit animation, leaving the first framing too loose.
-   * Guarded by a ref so later engine stops never yank a user's own camera.
+   * Cinematic intro per dimension, replacing the abrupt double snap. 2D glides
+   * in via a slow zoomToFit tween; 3D dollies from the parked camera. A
+   * correction pass follows because nodes drift during the fit animation, and
+   * it also re-applies autoRotate now that the 3D dolly has landed.
+   * Guarded by `hasFitRef` so later engine stops never yank a user's camera.
    */
-  const hasFitRef = useRef(false);
-  useEffect(() => {
-    hasFitRef.current = false;
-  }, [data, mode]);
-
   const handleEngineStop = useCallback(() => {
     if (hasFitRef.current) return;
     hasFitRef.current = true;
@@ -404,14 +552,25 @@ export default function GraphViewer({
     // noticeably more dead space than in 2D.
     const padding = mode === "2d" ? 60 : 25;
     const handle = mode === "2d" ? graph2dRef.current : graph3dRef.current;
-    handle?.zoomToFit(400, padding);
-    window.setTimeout(() => handle?.zoomToFit(250, padding), 500);
-  }, [mode]);
+    handle?.zoomToFit(mode === "2d" ? 1400 : 900, padding);
+    window.setTimeout(() => {
+      handle?.zoomToFit(300, padding);
+      if (mode === "3d") {
+        const controls = graph3dRef.current?.controls();
+        if (isOrbitLike(controls)) controls.autoRotate = autoRotate;
+      }
+    }, 700);
+  }, [autoRotate, mode]);
 
   const ready = size.width > 0 && size.height > 0;
 
   return (
     <div ref={containerRef} className="relative h-full w-full">
+      {/* Ambient CSS backdrop sits behind the transparent canvases: earlier
+          siblings render below the absolutely-positioned force-graph layers. */}
+      <div aria-hidden className="graph-backdrop absolute inset-0" />
+      <div aria-hidden className="graph-stars absolute inset-0 opacity-70" />
+
       {ready && mode === "2d" && (
         <ForceGraph2D
           ref={graph2dRef}
@@ -469,9 +628,29 @@ export default function GraphViewer({
           cooldownTime={4000}
           controlType="orbit"
           showNavInfo={false}
+          nodeThreeObject={nodeThreeObject}
         />
       )}
 
+      <div className="pointer-events-none absolute bottom-4 left-4 flex max-h-[calc(100%-8rem)] max-w-[min(16rem,50%)] flex-col items-start gap-2">
+        {communities.length > 0 && (
+          <div className="pointer-events-auto max-h-56 overflow-y-auto">
+            <CommunityLegend entries={communities} />
+          </div>
+        )}
+
+        {/* Kind chips: secondary legend row beneath the community colors. */}
+        <div className="pointer-events-auto flex max-w-full flex-wrap gap-1 overflow-y-auto">
+          {kinds.map(([kind, count]) => (
+            <span
+              key={kind}
+              className="rounded border border-border bg-surface/90 px-1.5 py-0.5 font-mono text-[9px] text-muted backdrop-blur"
+            >
+              {kind} <span className="text-foreground/70">{count}</span>
+            </span>
+          ))}
+        </div>
+      </div>
       <div className="pointer-events-none absolute left-4 top-4 flex max-w-[min(22rem,50%)] flex-col items-start gap-2">
         <div className="pointer-events-auto relative">
           {/* Deliberately type="text": the native search clear button would
@@ -489,17 +668,6 @@ export default function GraphViewer({
               {matched.size}
             </span>
           )}
-        </div>
-
-        <div className="flex flex-wrap gap-1">
-          {kinds.map(([kind, count]) => (
-            <span
-              key={kind}
-              className="rounded border border-border bg-surface/90 px-1.5 py-0.5 font-mono text-[10px] text-muted backdrop-blur"
-            >
-              {kind} <span className="text-foreground/70">{count}</span>
-            </span>
-          ))}
         </div>
       </div>
 
