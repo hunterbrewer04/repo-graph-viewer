@@ -2,22 +2,12 @@
 
 import { useCallback, useMemo, useState } from "react";
 
+import AppHeader from "@/components/AppHeader";
 import DetailPanel from "@/components/DetailPanel";
 import FileDrop from "@/components/FileDrop";
 import GraphViewer from "@/components/GraphViewer";
 import { buildAdjacency } from "@/lib/adjacency";
 import { loadGraph, type GraphData } from "@/lib/graphLoader";
-
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex flex-col leading-tight">
-      <span className="font-mono text-sm text-foreground">{value}</span>
-      <span className="text-[10px] uppercase tracking-wider text-muted">
-        {label}
-      </span>
-    </div>
-  );
-}
 
 export default function Home() {
   const [graph, setGraph] = useState<GraphData | null>(null);
@@ -46,33 +36,7 @@ export default function Home() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-2 border-b border-border bg-surface px-5 py-3">
-        <div className="flex items-baseline gap-2.5">
-          <h1 className="text-sm font-semibold tracking-tight">
-            Repo Graph Viewer
-          </h1>
-          {source && <span className="text-[11px] text-muted">{source}</span>}
-        </div>
-
-        {graph && (
-          <div className="flex items-center gap-6">
-            <Stat label="nodes" value={graph.stats.nodes} />
-            <Stat label="links" value={graph.stats.links} />
-            <Stat label="communities" value={graph.stats.communities} />
-            <Stat label="commit" value={graph.stats.commit || "—"} />
-          </div>
-        )}
-
-        {error && (
-          <p
-            role="alert"
-            className="ml-auto max-w-md truncate rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] text-red-300"
-            title={error}
-          >
-            {error}
-          </p>
-        )}
-      </header>
+      <AppHeader source={source} graph={graph} error={error} />
 
       <main className="flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-1">
