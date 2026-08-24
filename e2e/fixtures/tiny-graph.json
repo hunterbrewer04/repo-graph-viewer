@@ -1,0 +1,183 @@
+{
+  "nodes": [
+    {
+      "id": "n-user-service",
+      "name": "UserService",
+      "kind": "class",
+      "val": 12,
+      "community": 0,
+      "communityName": "users",
+      "color": "#60a5fa",
+      "file": "src/services/UserService.ts",
+      "loc": "1"
+    },
+    {
+      "id": "n-user-service-tests",
+      "name": "UserServiceTests",
+      "kind": "function",
+      "val": 6,
+      "community": 0,
+      "communityName": "users",
+      "color": "#60a5fa",
+      "file": "src/services/UserService.test.ts",
+      "loc": "1"
+    },
+    {
+      "id": "n-user-cache",
+      "name": "UserCache",
+      "kind": "class",
+      "val": 8,
+      "community": 0,
+      "communityName": "users",
+      "color": "#60a5fa",
+      "file": "src/cache/UserCache.ts",
+      "loc": "1"
+    },
+    {
+      "id": "n-http-client",
+      "name": "HttpClient",
+      "kind": "class",
+      "val": 10,
+      "community": 1,
+      "communityName": "net",
+      "color": "#f472b6",
+      "file": "src/net/HttpClient.ts",
+      "loc": "1"
+    },
+    {
+      "id": "n-http-request",
+      "name": "HttpRequest",
+      "kind": "class",
+      "val": 5,
+      "community": 1,
+      "communityName": "net",
+      "color": "#f472b6",
+      "file": "src/net/HttpRequest.ts",
+      "loc": "1"
+    },
+    {
+      "id": "n-http-response",
+      "name": "HttpResponse",
+      "kind": "class",
+      "val": 5,
+      "community": 1,
+      "communityName": "net",
+      "color": "#f472b6",
+      "file": "src/net/HttpResponse.ts",
+      "loc": "1"
+    },
+    {
+      "id": "n-fetch-json",
+      "name": "fetchJson",
+      "kind": "function",
+      "val": 4,
+      "community": 1,
+      "communityName": "net",
+      "color": "#f472b6",
+      "file": "src/net/fetchJson.ts",
+      "loc": "1"
+    },
+    {
+      "id": "n-retry-policy",
+      "name": "RetryPolicy",
+      "kind": "class",
+      "val": 4,
+      "community": 1,
+      "communityName": "net",
+      "color": "#f472b6",
+      "file": "src/net/RetryPolicy.ts",
+      "loc": "1"
+    },
+    {
+      "id": "n-auth-service",
+      "name": "AuthService",
+      "kind": "class",
+      "val": 9,
+      "community": 2,
+      "communityName": "auth",
+      "color": "#34d399",
+      "file": "src/auth/AuthService.ts",
+      "loc": "1"
+    },
+    {
+      "id": "n-token-store",
+      "name": "TokenStore",
+      "kind": "class",
+      "val": 6,
+      "community": 2,
+      "communityName": "auth",
+      "color": "#34d399",
+      "file": "src/auth/TokenStore.ts",
+      "loc": "1"
+    },
+    {
+      "id": "n-hash-password",
+      "name": "hashPassword",
+      "kind": "function",
+      "val": 3,
+      "community": 2,
+      "communityName": "auth",
+      "color": "#34d399",
+      "file": "src/auth/hash.ts",
+      "loc": "1"
+    },
+    {
+      "id": "n-verify-password",
+      "name": "verifyPassword",
+      "kind": "function",
+      "val": 3,
+      "community": 2,
+      "communityName": "auth",
+      "color": "#34d399",
+      "file": "src/auth/hash.ts",
+      "loc": "40"
+    },
+    {
+      "id": "n-session-manager",
+      "name": "SessionManager",
+      "kind": "module",
+      "val": 7,
+      "community": 2,
+      "communityName": "auth",
+      "color": "#34d399",
+      "file": "src/auth/session.ts",
+      "loc": "1"
+    },
+    {
+      "id": "n-config-loader",
+      "name": "ConfigLoader",
+      "kind": "module",
+      "val": 5,
+      "community": 0,
+      "communityName": "users",
+      "color": "#60a5fa",
+      "file": "src/config/ConfigLoader.ts",
+      "loc": "1"
+    }
+  ],
+  "links": [
+    { "source": "n-user-service", "target": "n-user-cache", "relation": "CALLS" },
+    { "source": "n-user-service", "target": "n-http-client", "relation": "CALLS" },
+    { "source": "n-user-service", "target": "n-config-loader", "relation": "IMPORTS", "confidence": "INFERRED" },
+    { "source": "n-user-service", "target": "n-auth-service", "relation": "IMPORTS" },
+    {
+      "source": "n-user-service-tests",
+      "target": "n-user-service",
+      "relation": "IMPORTS",
+      "confidence": "INFERRED"
+    },
+    { "source": "n-http-client", "target": "n-http-request", "relation": "CALLS" },
+    { "source": "n-http-client", "target": "n-http-response", "relation": "CALLS" },
+    { "source": "n-fetch-json", "target": "n-http-client", "relation": "CALLS" },
+    { "source": "n-fetch-json", "target": "n-retry-policy", "relation": "IMPORTS" },
+    { "source": "n-http-request", "target": "n-retry-policy", "relation": "IMPORTS", "confidence": "INFERRED" },
+    { "source": "n-auth-service", "target": "n-token-store", "relation": "CALLS" },
+    { "source": "n-auth-service", "target": "n-hash-password", "relation": "CALLS" },
+    { "source": "n-auth-service", "target": "n-verify-password", "relation": "CALLS" },
+    { "source": "n-auth-service", "target": "n-http-client", "relation": "IMPORTS", "confidence": "INFERRED" },
+    { "source": "n-session-manager", "target": "n-token-store", "relation": "CALLS" },
+    { "source": "n-session-manager", "target": "n-user-service", "relation": "IMPORTS" },
+    { "source": "n-verify-password", "target": "n-hash-password", "relation": "CALLS" },
+    { "source": "n-config-loader", "target": "n-user-cache", "relation": "IMPORTS", "confidence": "INFERRED" }
+  ]
+}
