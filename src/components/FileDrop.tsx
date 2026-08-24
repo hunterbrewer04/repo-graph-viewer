@@ -83,6 +83,11 @@ export default function FileDrop({ onFile, onError, children }: FileDropProps) {
     >
       {children}
 
+      {/* Always-visible hint: dropping works before AND after a graph loads. */}
+      <div className="pointer-events-none absolute bottom-4 left-4 flex items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 py-1 text-[10px] uppercase tracking-wider text-muted">
+        drop graph.json anywhere
+      </div>
+
       {/* Bottom-right, because Next's dev-mode indicator sits bottom-left. */}
       <div className="pointer-events-none absolute bottom-4 right-4">
         <button
