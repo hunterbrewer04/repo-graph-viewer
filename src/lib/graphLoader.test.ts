@@ -299,6 +299,31 @@ describe("paletteForCommunity", () => {
   });
 });
 
+describe("loadGraph — metadata for header", () => {
+  it("exposes node and edge counts plus build commit", () => {
+    const { stats } = loadGraph(fixture());
+    expect(stats.nodes).toBe(3);
+    expect(stats.links).toBe(2);
+    expect(stats.commit).toBe("abc1234"); // fixture ships built_at_commit
+  });
+
+  it("counts edges supplied under the legacy `edges` key", () => {
+    const raw = JSON.parse(fixture()) as Record<string, unknown>;
+    raw.edges = raw.links;
+    delete raw.links;
+    expect(loadGraph(JSON.stringify(raw)).stats.links).toBe(2);
+  });
+
+  it("renders an em-dash placeholder when commit is absent", () => {
+    // documents the page.tsx contract: `graph.stats.commit || "—"`
+    const raw = JSON.parse(fixture()) as Record<string, unknown>;
+    delete raw.built_at_commit;
+    const { stats } = loadGraph(JSON.stringify(raw));
+    expect(stats.commit).toBe("");
+    expect(stats.commit || "—").toBe("—");
+  });
+});
+
 describe("loadGraph — error handling", () => {
   it("rejects malformed JSON with a clear error", () => {
     expect(() => loadGraph("{ not json")).toThrow(/not valid JSON/i);
