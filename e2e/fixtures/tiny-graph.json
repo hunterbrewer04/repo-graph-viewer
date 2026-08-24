@@ -1,158 +1,131 @@
 {
+  "_comment": "graphify-shaped fixture for e2e. Field names follow the loader contract in src/lib/graphLoader.ts (label, type, community_name, source_file, source_location); val and color derive from links/community.",
   "nodes": [
     {
       "id": "n-user-service",
-      "name": "UserService",
-      "kind": "class",
-      "val": 12,
+      "label": "UserService",
+      "type": "class",
       "community": 0,
-      "communityName": "users",
-      "color": "#60a5fa",
-      "file": "src/services/UserService.ts",
-      "loc": "1"
+      "community_name": "users",
+      "source_file": "src/services/UserService.ts",
+      "source_location": "1"
     },
     {
       "id": "n-user-service-tests",
-      "name": "UserServiceTests",
-      "kind": "function",
-      "val": 6,
+      "label": "UserServiceTests",
+      "type": "function",
       "community": 0,
-      "communityName": "users",
-      "color": "#60a5fa",
-      "file": "src/services/UserService.test.ts",
-      "loc": "1"
+      "community_name": "users",
+      "source_file": "src/services/UserService.test.ts",
+      "source_location": "1"
     },
     {
       "id": "n-user-cache",
-      "name": "UserCache",
-      "kind": "class",
-      "val": 8,
+      "label": "UserCache",
+      "type": "class",
       "community": 0,
-      "communityName": "users",
-      "color": "#60a5fa",
-      "file": "src/cache/UserCache.ts",
-      "loc": "1"
+      "community_name": "users",
+      "source_file": "src/cache/UserCache.ts",
+      "source_location": "1"
     },
     {
       "id": "n-http-client",
-      "name": "HttpClient",
-      "kind": "class",
-      "val": 10,
+      "label": "HttpClient",
+      "type": "class",
       "community": 1,
-      "communityName": "net",
-      "color": "#f472b6",
-      "file": "src/net/HttpClient.ts",
-      "loc": "1"
+      "community_name": "net",
+      "source_file": "src/net/HttpClient.ts",
+      "source_location": "1"
     },
     {
       "id": "n-http-request",
-      "name": "HttpRequest",
-      "kind": "class",
-      "val": 5,
+      "label": "HttpRequest",
+      "type": "class",
       "community": 1,
-      "communityName": "net",
-      "color": "#f472b6",
-      "file": "src/net/HttpRequest.ts",
-      "loc": "1"
+      "community_name": "net",
+      "source_file": "src/net/HttpRequest.ts",
+      "source_location": "1"
     },
     {
       "id": "n-http-response",
-      "name": "HttpResponse",
-      "kind": "class",
-      "val": 5,
+      "label": "HttpResponse",
+      "type": "class",
       "community": 1,
-      "communityName": "net",
-      "color": "#f472b6",
-      "file": "src/net/HttpResponse.ts",
-      "loc": "1"
+      "community_name": "net",
+      "source_file": "src/net/HttpResponse.ts",
+      "source_location": "1"
     },
     {
       "id": "n-fetch-json",
-      "name": "fetchJson",
-      "kind": "function",
-      "val": 4,
+      "label": "fetchJson",
+      "type": "function",
       "community": 1,
-      "communityName": "net",
-      "color": "#f472b6",
-      "file": "src/net/fetchJson.ts",
-      "loc": "1"
+      "community_name": "net",
+      "source_file": "src/net/fetchJson.ts",
+      "source_location": "1"
     },
     {
       "id": "n-retry-policy",
-      "name": "RetryPolicy",
-      "kind": "class",
-      "val": 4,
+      "label": "RetryPolicy",
+      "type": "class",
       "community": 1,
-      "communityName": "net",
-      "color": "#f472b6",
-      "file": "src/net/RetryPolicy.ts",
-      "loc": "1"
+      "community_name": "net",
+      "source_file": "src/net/RetryPolicy.ts",
+      "source_location": "1"
     },
     {
       "id": "n-auth-service",
-      "name": "AuthService",
-      "kind": "class",
-      "val": 9,
+      "label": "AuthService",
+      "type": "class",
       "community": 2,
-      "communityName": "auth",
-      "color": "#34d399",
-      "file": "src/auth/AuthService.ts",
-      "loc": "1"
+      "community_name": "auth",
+      "source_file": "src/auth/AuthService.ts",
+      "source_location": "1"
     },
     {
       "id": "n-token-store",
-      "name": "TokenStore",
-      "kind": "class",
-      "val": 6,
+      "label": "TokenStore",
+      "type": "class",
       "community": 2,
-      "communityName": "auth",
-      "color": "#34d399",
-      "file": "src/auth/TokenStore.ts",
-      "loc": "1"
+      "community_name": "auth",
+      "source_file": "src/auth/TokenStore.ts",
+      "source_location": "1"
     },
     {
       "id": "n-hash-password",
-      "name": "hashPassword",
-      "kind": "function",
-      "val": 3,
+      "label": "hashPassword",
+      "type": "function",
       "community": 2,
-      "communityName": "auth",
-      "color": "#34d399",
-      "file": "src/auth/hash.ts",
-      "loc": "1"
+      "community_name": "auth",
+      "source_file": "src/auth/hash.ts",
+      "source_location": "1"
     },
     {
       "id": "n-verify-password",
-      "name": "verifyPassword",
-      "kind": "function",
-      "val": 3,
+      "label": "verifyPassword",
+      "type": "function",
       "community": 2,
-      "communityName": "auth",
-      "color": "#34d399",
-      "file": "src/auth/hash.ts",
-      "loc": "40"
+      "community_name": "auth",
+      "source_file": "src/auth/hash.ts",
+      "source_location": "40"
     },
     {
       "id": "n-session-manager",
-      "name": "SessionManager",
-      "kind": "module",
-      "val": 7,
+      "label": "SessionManager",
+      "type": "module",
       "community": 2,
-      "communityName": "auth",
-      "color": "#34d399",
-      "file": "src/auth/session.ts",
-      "loc": "1"
+      "community_name": "auth",
+      "source_file": "src/auth/session.ts",
+      "source_location": "1"
     },
     {
       "id": "n-config-loader",
-      "name": "ConfigLoader",
-      "kind": "module",
-      "val": 5,
+      "label": "ConfigLoader",
+      "type": "module",
       "community": 0,
-      "communityName": "users",
-      "color": "#60a5fa",
-      "file": "src/config/ConfigLoader.ts",
-      "loc": "1"
+      "community_name": "users",
+      "source_file": "src/config/ConfigLoader.ts",
+      "source_location": "1"
     }
   ],
   "links": [
