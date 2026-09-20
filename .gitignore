@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# planning / handoff docs stay local
+/docs/plans/
+/handoff.md
+/PLAN*.md
