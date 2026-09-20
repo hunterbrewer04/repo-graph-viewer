@@ -83,8 +83,9 @@ export default function FileDrop({ onFile, onError, children }: FileDropProps) {
     >
       {children}
 
-      {/* Always-visible hint: dropping works before AND after a graph loads. */}
-      <div className="pointer-events-none absolute bottom-4 left-4 flex items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 py-1 text-[10px] uppercase tracking-wider text-muted">
+      {/* Always-visible hint: dropping works before AND after a graph loads.
+          Hidden on phones, where there is nothing to drag from. */}
+      <div className="pointer-events-none absolute bottom-4 left-4 hidden items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 py-1 text-[10px] uppercase tracking-wider text-muted sm:flex">
         drop graph.json anywhere
       </div>
 
@@ -93,7 +94,7 @@ export default function FileDrop({ onFile, onError, children }: FileDropProps) {
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="pointer-events-auto rounded-md border border-border bg-surface/90 px-3 py-1.5 text-[11px] text-muted backdrop-blur transition-colors hover:text-foreground"
+          className="pointer-events-auto rounded-md border border-border bg-surface/90 px-3.5 py-2 text-[11px] text-muted backdrop-blur transition-colors hover:text-foreground sm:px-3 sm:py-1.5"
         >
           Load file…
         </button>

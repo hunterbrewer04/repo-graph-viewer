@@ -97,9 +97,11 @@ export default function DetailPanel({
   const selected = selectedId ? nodesById.get(selectedId) : undefined;
   const entry = adjacencyFor(adjacency, selectedId);
 
+  // Below `md` the panel is a bottom sheet over the canvas: shown only while
+  // something is selected, since the placeholder is wasted space on a phone.
   if (!selected) {
     return (
-      <aside className="flex w-80 shrink-0 items-center justify-center border-l border-border bg-surface p-6">
+      <aside className="hidden w-80 shrink-0 items-center justify-center border-l border-border bg-surface p-6 md:flex">
         <p className="text-center text-xs leading-relaxed text-muted">
           Click a node to inspect its source location, community, and neighbors.
         </p>
@@ -108,7 +110,11 @@ export default function DetailPanel({
   }
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-surface">
+    <aside className="fixed inset-x-0 bottom-0 z-20 flex max-h-[50dvh] flex-col rounded-t-2xl border-t border-border bg-surface shadow-[0_-8px_30px_rgba(0,0,0,0.25)] md:static md:z-auto md:max-h-none md:w-80 md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:shadow-none">
+      <div
+        aria-hidden
+        className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-border md:hidden"
+      />
       <header className="border-b border-border p-4">
         <div className="flex items-start gap-2">
           <span
@@ -123,7 +129,7 @@ export default function DetailPanel({
             type="button"
             onClick={() => onSelect(null)}
             aria-label="Clear selection"
-            className="-mr-1 shrink-0 rounded px-1.5 text-muted transition-colors hover:bg-surface-raised hover:text-foreground"
+            className="-mr-1 -mt-1 shrink-0 rounded px-2.5 py-1 text-lg leading-none text-muted transition-colors hover:bg-surface-raised hover:text-foreground md:mt-0 md:px-1.5 md:py-0 md:text-base"
           >
             ×
           </button>
@@ -135,7 +141,7 @@ export default function DetailPanel({
         </p>
       </header>
 
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <dl className="space-y-2 text-xs">
           <div className="flex justify-between gap-3">
             <dt className="text-muted">Kind</dt>

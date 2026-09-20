@@ -1,0 +1,42 @@
+[
+  {
+    "id": "apple-calendar-mcp",
+    "name": "apple-calendar-mcp",
+    "file": "/graphs/apple-calendar-mcp.json",
+    "language": "Swift",
+    "blurb": "MCP server that exposes Apple Calendar to AI agents over EventKit.",
+    "stats": { "nodes": 398, "links": 977, "communities": 13 }
+  },
+  {
+    "id": "portfolio-site",
+    "name": "portfolio-site",
+    "file": "/graphs/portfolio-site.json",
+    "language": "TypeScript",
+    "blurb": "Personal portfolio built on Next.js and MDX.",
+    "stats": { "nodes": 304, "links": 425, "communities": 21 }
+  },
+  {
+    "id": "search-algorithms-demos",
+    "name": "Search-Algorithms-Demos",
+    "file": "/graphs/search-algorithms-demos.json",
+    "language": "JavaScript",
+    "blurb": "Interactive visualizer for classical AI search algorithms, vanilla JS.",
+    "stats": { "nodes": 255, "links": 519, "communities": 12 }
+  },
+  {
+    "id": "rummy-tracker",
+    "name": "Rummy Tracker",
+    "file": "/graphs/rummy-tracker.json",
+    "language": "Swift",
+    "blurb": "iOS score tracker for Rummy, SwiftUI and SwiftData.",
+    "stats": { "nodes": 192, "links": 410, "communities": 10 }
+  },
+  {
+    "id": "speedtest-cli",
+    "name": "speedtest-cli",
+    "file": "/graphs/speedtest-cli.json",
+    "language": "Python",
+    "blurb": "Single-file terminal front-end for Ookla's speedtest CLI.",
+    "stats": { "nodes": 14, "links": 27, "communities": 3 }
+  }
+]

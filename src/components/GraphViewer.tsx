@@ -94,6 +94,10 @@ interface ForceGraph3DProps extends ForceGraphSharedProps {
 
 interface ForceGraph2DHandle {
   zoomToFit: (ms?: number, padding?: number) => void;
+  /** Pans so graph-space (x, y) sits at the canvas center. */
+  centerAt: (x: number, y: number, ms?: number) => void;
+  /** Current zoom level when called without arguments. */
+  zoom: () => number;
 }
 
 interface ForceGraph3DHandle {
@@ -401,12 +405,33 @@ export default function GraphViewer({
     if (hasFitRef.current) return;
     hasFitRef.current = true;
     // 3D fits a bounding sphere rather than a box, so the same padding leaves
-    // noticeably more dead space than in 2D.
-    const padding = mode === "2d" ? 60 : 25;
+    // noticeably more dead space than in 2D. Phone-width canvases get less
+    // still, or 120px of a 390px canvas goes to margins.
+    const narrow = size.width < 640;
+    const padding = mode === "2d" ? (narrow ? 24 : 60) : narrow ? 10 : 25;
     const handle = mode === "2d" ? graph2dRef.current : graph3dRef.current;
     handle?.zoomToFit(400, padding);
     window.setTimeout(() => handle?.zoomToFit(250, padding), 500);
-  }, [mode]);
+  }, [mode, size.width]);
+
+  /**
+   * Below `md` the detail panel is a bottom sheet covering the lower half of
+   * the viewport, usually right where the tapped node sits. Pan so the node
+   * lands in the middle of the strip that stays visible. 2D only: orbit
+   * controls make the same move in 3D disorienting.
+   */
+  useEffect(() => {
+    if (!selectedId || mode !== "2d" || size.width >= 768) return;
+    const handle = graph2dRef.current;
+    const node = data.nodes.find((n) => n.id === selectedId) as
+      | SimNode
+      | undefined;
+    if (!handle || node?.x === undefined || node.y === undefined) return;
+    // Sheet is 50dvh; the canvas is the viewport minus the header.
+    const visible = size.height - window.innerHeight * 0.5;
+    const shift = (size.height / 2 - visible / 2) / handle.zoom();
+    handle.centerAt(node.x, node.y + shift, 400);
+  }, [data, mode, selectedId, size.height, size.width]);
 
   const ready = size.width > 0 && size.height > 0;
 
@@ -475,14 +500,16 @@ export default function GraphViewer({
       <div className="pointer-events-none absolute left-4 top-4 flex max-w-[min(22rem,50%)] flex-col items-start gap-2">
         <div className="pointer-events-auto relative">
           {/* Deliberately type="text": the native search clear button would
-              sit on top of the match count, and Escape already clears. */}
+              sit on top of the match count, and Escape already clears.
+              16px on phones because iOS Safari zooms the page to focus any
+              smaller input, and with overflow hidden it never zooms back. */}
           <input
             type="text"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search nodes…"
             aria-label="Search nodes"
-            className="w-56 rounded-md border border-border bg-surface/90 py-1.5 pl-2.5 pr-9 text-[11px] text-foreground placeholder:text-muted outline-none backdrop-blur focus:border-accent"
+            className="w-44 rounded-md border border-border bg-surface/90 py-1.5 pl-2.5 pr-9 text-base text-foreground placeholder:text-muted outline-none backdrop-blur focus:border-accent sm:w-56 sm:text-[11px]"
           />
           {matched && (
             <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-[10px] text-muted">
@@ -503,9 +530,10 @@ export default function GraphViewer({
         </div>
       </div>
 
-      <div className="pointer-events-none absolute right-4 top-4 flex items-center gap-2">
+      {/* Auto-rotate stacks under the 2D/3D toggle on phones rather than beside it. */}
+      <div className="pointer-events-none absolute right-4 top-4 flex flex-col-reverse items-end gap-2 sm:flex-row sm:items-center">
         {mode === "3d" && (
-          <label className="pointer-events-auto flex cursor-pointer select-none items-center gap-1.5 rounded-md border border-border bg-surface/90 px-2.5 py-1.5 text-[11px] text-muted backdrop-blur transition-colors hover:text-foreground">
+          <label className="pointer-events-auto flex cursor-pointer select-none items-center gap-1.5 rounded-md border border-border bg-surface/90 px-2.5 py-2 text-[11px] text-muted backdrop-blur transition-colors hover:text-foreground sm:py-1.5">
             <input
               type="checkbox"
               checked={autoRotate}
@@ -528,7 +556,7 @@ export default function GraphViewer({
               type="button"
               onClick={() => setMode(option)}
               aria-pressed={mode === option}
-              className={`px-3 py-1.5 text-[11px] font-medium uppercase transition-colors ${
+              className={`px-3.5 py-2 text-[11px] font-medium uppercase transition-colors sm:px-3 sm:py-1.5 ${
                 mode === option
                   ? "bg-surface-raised text-foreground"
                   : "text-muted hover:text-foreground"

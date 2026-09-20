@@ -11,9 +11,9 @@ npm run dev     # http://localhost:3000
 npm test        # loader + adjacency unit tests
 ```
 
-Most tests are self-contained. Six of them assert against a real graphify graph
-and are skipped unless one exists on disk; point them at any repo you have
-already run graphify on:
+Most tests are self-contained. Six of them assert against a real graphify graph,
+which defaults to the bundled `public/graphs/apple-calendar-mcp.json`; point them
+at any repo you have already run graphify on instead:
 
 ```bash
 GRAPH_CORPUS=/path/to/repo/graphify-out/graph.json npm test
@@ -21,7 +21,8 @@ GRAPH_CORPUS=/path/to/repo/graphify-out/graph.json npm test
 
 ## Loading a graph
 
-Run graphify on any repo, then open the `graph.json` it writes:
+The viewer starts empty and offers a few bundled examples to click through.
+To render your own, run graphify on any repo and open the `graph.json` it writes:
 
 ```bash
 graphify extract /path/to/repo --code-only
@@ -29,11 +30,36 @@ graphify cluster-only /path/to/repo --no-label   # optional: community naming
 # -> /path/to/repo/graphify-out/graph.json
 ```
 
+- **Examples** (the prompt on the empty canvas, or the header button once a
+  graph is up) loads one of the bundled graphs.
 - **Drag and drop** a `graph.json` anywhere on the canvas.
 - **Load file…** (bottom-right) opens a file picker for the same thing.
 
-Loading a graph replaces whatever is on screen. No datasets ship with this repo;
-it starts empty and renders whatever you give it.
+Loading a graph replaces whatever is on screen.
+
+### Bundled examples
+
+`public/graphs/manifest.json` lists them; each entry points at a minified
+graphify graph committed next to it. They are fetched on click, not on page
+load. To add one, run `graphify extract <repo> --code-only --out <dir>`, copy
+`<dir>/graphify-out/graph.json` into `public/graphs/`, and add a manifest entry.
+`examples.test.ts` checks that every entry exists, loads, and that the node,
+link, and community counts on its card match the file.
+
+| Example | Language | Nodes / links |
+| --- | --- | --- |
+| apple-calendar-mcp | Swift | 398 / 977 |
+| portfolio-site | TypeScript | 304 / 425 |
+| Search-Algorithms-Demos | JavaScript | 255 / 519 |
+| Rummy Tracker | Swift | 192 / 410 |
+| speedtest-cli | Python | 14 / 27 |
+
+## Theme
+
+Light by default, with a toggle in the header. The choice is saved to
+`localStorage` and applied by an inline script before first paint, so there is
+no flash on reload. Only the chrome switches: the graph canvas stays black in
+both themes because the community palette is tuned for light-on-dark.
 
 ## Controls
 
@@ -48,6 +74,11 @@ it starts empty and renders whatever you give it.
 
 Link styling: dashed edges are `INFERRED` (graphify's guess), solid are
 `EXTRACTED` (parsed from the AST).
+
+On phones the detail panel is a bottom sheet instead of a sidebar; tapping a
+node in 2D pans it into the strip above the sheet. Tap the canvas or × to
+dismiss. The search box is 16px there because iOS Safari zooms the page to
+focus anything smaller.
 
 ## Format notes
 

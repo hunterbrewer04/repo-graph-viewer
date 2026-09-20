@@ -1,8 +1,21 @@
 @import "tailwindcss";
 
-/* Deliberately dark-only: the graph canvas is tuned for light-on-dark and a
-   light theme would wash out the community palette. */
+/* Theme is a `data-theme` attribute on <html>, set before first paint by the
+   inline script in layout.tsx. Light is the default (no attribute). Only the
+   chrome switches; the graph canvas stays black in both themes because the
+   community palette is tuned for light-on-dark. */
 :root {
+  --background: #f7f7f9;
+  --surface: #ffffff;
+  --surface-raised: #f0f0f4;
+  --border: #e2e2e8;
+  --foreground: #15151c;
+  --muted: #6b6b7b;
+  --accent: #2563eb;
+  --scrollbar-hover: #c4c4cc;
+}
+
+:root[data-theme="dark"] {
   --background: #08080b;
   --surface: #101015;
   --surface-raised: #16161d;
@@ -10,7 +23,11 @@
   --foreground: #e8e8ee;
   --muted: #8b8b9a;
   --accent: #60a5fa;
+  --scrollbar-hover: #35353f;
 }
+
+/* Lets components use `dark:` for the few spots tokens do not cover. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme inline {
   --color-background: var(--background);
@@ -25,6 +42,9 @@
 }
 
 html {
+  color-scheme: light;
+}
+html[data-theme="dark"] {
   color-scheme: dark;
 }
 
@@ -41,6 +61,15 @@ body {
   overscroll-behavior: none;
 }
 
+/* Controls sit over a canvas that handles its own gestures, so the mobile
+   tap-highlight flash and double-tap zoom only get in the way. */
+button,
+input,
+label {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -53,5 +82,5 @@ body {
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #35353f;
+  background: var(--scrollbar-hover);
 }
