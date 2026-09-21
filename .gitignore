@@ -44,3 +44,6 @@ next-env.d.ts
 /docs/plans/
 /handoff.md
 /PLAN*.md
+
+# wrangler local state
+/.wrangler/

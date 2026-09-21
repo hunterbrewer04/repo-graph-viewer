@@ -1,0 +1,11 @@
+{
+  // Static-assets-only Worker: no script, wrangler just uploads out/ (the
+  // Next.js static export) and serves it at graph.hunterbrewer.com.
+  // Cloudflare Workers Builds runs `npm run build` then `npx wrangler deploy`.
+  "name": "repo-graph-viewer",
+  "compatibility_date": "2026-09-21",
+  "assets": {
+    "directory": "./out",
+    "not_found_handling": "404-page"
+  }
+}

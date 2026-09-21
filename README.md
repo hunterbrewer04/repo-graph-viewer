@@ -16,9 +16,10 @@ npm run build   # static export to out/
 ## Deploy
 
 `next.config.ts` sets `output: "export"`, so `npm run build` writes a plain
-static site to `out/`. Cloudflare Pages builds it from this repo on every push
-to `main` (build command `npm run build`, output directory `out`) and serves it
-at graph.hunterbrewer.com. Nothing else to run.
+static site to `out/`. A Cloudflare Worker serves that directory as static
+assets (`wrangler.jsonc`, no script) at graph.hunterbrewer.com. Workers Builds
+runs `npm run build` then `npx wrangler deploy` on every push to `main`.
+Nothing else to run.
 
 ## URL parameters
 
