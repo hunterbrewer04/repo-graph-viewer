@@ -18,16 +18,19 @@ export const metadata: Metadata = {
 };
 
 /**
- * Applies the saved theme before first paint so a dark-mode visitor never sees
- * a light flash. Light is the default, so only "dark" needs the attribute.
- * Storage can throw (private mode, blocked cookies), in which case light wins.
+ * Applies the theme before first paint so a dark-mode visitor never sees a
+ * light flash. `?theme=dark|light` in the URL wins over the saved choice (an
+ * embedding page can match its own chrome without touching the visitor's
+ * preference), then localStorage. Light is the default, so only "dark" needs
+ * the attribute. Storage can throw (private mode, blocked cookies), in which
+ * case light wins.
  *
  * A raw <script> rather than next/script: an inline `beforeInteractive` script
  * is queued for Next's client runtime instead of being emitted into the HTML,
  * which is too late. Placed first in <body> so it runs before any content is
  * parsed, and nothing hydrates it because the root layout never re-renders.
  */
-const THEME_INIT = `try{if(localStorage.getItem("theme")==="dark")document.documentElement.dataset.theme="dark"}catch(e){}`;
+const THEME_INIT = `try{var t=new URLSearchParams(location.search).get("theme")||localStorage.getItem("theme");if(t==="dark")document.documentElement.dataset.theme="dark"}catch(e){}`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

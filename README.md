@@ -3,13 +3,35 @@
 Renders any graphify `graph.json` as an interactive code graph — 2D canvas or 3D
 WebGL, colored by community, with a node detail panel and search.
 
-Fully client-side. No backend, no auth, nothing to deploy.
+Fully client-side. No backend, no auth. Live at
+[graph.hunterbrewer.com](https://graph.hunterbrewer.com).
 
 ```bash
 npm install
 npm run dev     # http://localhost:3000
 npm test        # loader + adjacency unit tests
+npm run build   # static export to out/
 ```
+
+## Deploy
+
+`next.config.ts` sets `output: "export"`, so `npm run build` writes a plain
+static site to `out/`. Cloudflare Pages builds it from this repo on every push
+to `main` (build command `npm run build`, output directory `out`) and serves it
+at graph.hunterbrewer.com. Nothing else to run.
+
+## URL parameters
+
+Both are optional and combine.
+
+| Param | Effect |
+| --- | --- |
+| `?example=<id>` | Opens straight onto that bundled example (an `id` from `manifest.json`); unknown ids fall through to the picker |
+| `?theme=dark` / `light` | Wins over the saved theme for this load, without changing it |
+
+The portfolio embeds the viewer as
+`/?example=portfolio-site&theme=dark` so the frame lands on a live graph in
+chrome that matches the page around it.
 
 Most tests are self-contained. Six of them assert against a real graphify graph,
 which defaults to the bundled `public/graphs/apple-calendar-mcp.json`; point them

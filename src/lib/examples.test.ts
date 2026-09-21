@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { parseManifest } from "./examples";
+import { exampleFromQuery, parseManifest } from "./examples";
 import { loadGraph } from "./graphLoader";
 
 const PUBLIC_DIR = join(__dirname, "../../public");
@@ -41,6 +41,29 @@ describe("parseManifest", () => {
     ]);
     expect(partial.stats).toBeNull();
     expect(full.stats).toEqual({ nodes: 1, links: 2, communities: 3 });
+  });
+});
+
+describe("exampleFromQuery", () => {
+  const examples = parseManifest([
+    { id: "alpha", file: "/graphs/alpha.json" },
+    { id: "beta", file: "/graphs/beta.json" },
+  ]);
+
+  it("returns the example whose id matches ?example=", () => {
+    expect(exampleFromQuery("?example=beta", examples)?.id).toBe("beta");
+  });
+
+  it("ignores other params and accepts a leading ? or none", () => {
+    expect(exampleFromQuery("?theme=dark&example=alpha", examples)?.id).toBe("alpha");
+    expect(exampleFromQuery("example=alpha", examples)?.id).toBe("alpha");
+  });
+
+  it("returns null when the param is missing, empty, or unknown", () => {
+    expect(exampleFromQuery("", examples)).toBeNull();
+    expect(exampleFromQuery("?example=", examples)).toBeNull();
+    expect(exampleFromQuery("?example=gamma", examples)).toBeNull();
+    expect(exampleFromQuery("?example=alpha", [])).toBeNull();
   });
 });
 

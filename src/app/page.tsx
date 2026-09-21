@@ -9,6 +9,7 @@ import FileDrop from "@/components/FileDrop";
 import GraphViewer from "@/components/GraphViewer";
 import { buildAdjacency } from "@/lib/adjacency";
 import {
+  exampleFromQuery,
   fetchExampleGraph,
   fetchExamples,
   type Example,
@@ -30,19 +31,6 @@ export default function Home() {
   /** Id of the example being fetched, so its card can show progress. */
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-
-  // A missing manifest is not an error: the drop zone still works without it.
-  useEffect(() => {
-    let cancelled = false;
-    fetchExamples()
-      .then((list) => {
-        if (!cancelled) setExamples(list);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   /** Loading a graph replaces whatever is on screen; a failure leaves it up. */
   const applyGraph = useCallback((text: string, label: string) => {
@@ -70,6 +58,24 @@ export default function Home() {
     },
     [applyGraph],
   );
+
+  // A missing manifest is not an error: the drop zone still works without it.
+  // `?example=<id>` opens straight onto that graph, which is how the portfolio
+  // embeds the viewer with something already on screen.
+  useEffect(() => {
+    let cancelled = false;
+    fetchExamples()
+      .then((list) => {
+        if (cancelled) return;
+        setExamples(list);
+        const wanted = exampleFromQuery(window.location.search, list);
+        if (wanted) void loadExample(wanted);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [loadExample]);
 
   const openPicker = useCallback(() => setPickerOpen(true), []);
   const closePicker = useCallback(() => setPickerOpen(false), []);

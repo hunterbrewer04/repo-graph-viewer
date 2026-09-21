@@ -75,3 +75,17 @@ export async function fetchExampleGraph(example: Example): Promise<string> {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.text();
 }
+
+/**
+ * The example named by `?example=<id>` in a URL's query string, so a link (or
+ * an embedding page) can open straight onto a graph instead of the picker.
+ * Unknown or missing ids fall through to the normal empty state.
+ */
+export function exampleFromQuery(
+  search: string,
+  examples: Example[],
+): Example | null {
+  const id = new URLSearchParams(search).get("example");
+  if (!id) return null;
+  return examples.find((example) => example.id === id) ?? null;
+}
